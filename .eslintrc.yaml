@@ -1,0 +1,23 @@
+env:
+  node: true
+  es2020: true
+
+ignorePatterns:
+  - dist
+
+plugins:
+  - jest
+
+extends:
+  - plugin:@foxglove/base
+  - plugin:@foxglove/jest
+
+overrides:
+  - files: ["*.ts", "*.tsx"]
+    extends:
+      - plugin:@foxglove/typescript
+    parserOptions:
+      project: [./tsconfig.json, ./tsconfig.dts.json, ./tsconfig.examples.json]
+    rules:
+      "@typescript-eslint/restrict-template-expressions": off
+      "no-warning-comments": 0
