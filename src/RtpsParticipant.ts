@@ -347,24 +347,24 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     );
   }
 
-  private async _sendDefaultTo(msg: RtpsMessage, destGuidPrefix: GuidPrefix): Promise<void> {
-    const participant = this.participants.get(destGuidPrefix.toString());
-    if (participant == undefined) {
-      this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);
-      return;
-    }
+  // private async _sendDefaultTo(msg: RtpsMessage, destGuidPrefix: GuidPrefix): Promise<void> {
+  //   const participant = this.participants.get(destGuidPrefix.toString());
+  //   if (participant == undefined) {
+  //     this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);
+  //     return;
+  //   }
 
-    const locators = participant.defaultUnicastLocatorList;
-    const payload = msg.data;
-    await Promise.all(
-      locators.map((locator) => {
-        this.log?.debug?.(
-          `Sending ${payload.length} bytes of user data to ${locator} (${destGuidPrefix})`,
-        );
-        return this.defaultUnicastSocket?.send(payload, locator.port, locator.address);
-      }),
-    );
-  }
+  //   const locators = participant.defaultUnicastLocatorList;
+  //   const payload = msg.data;
+  //   await Promise.all(
+  //     locators.map((locator) => {
+  //       this.log?.debug?.(
+  //         `Sending ${payload.length} bytes of user data to ${locator} (${destGuidPrefix})`,
+  //       );
+  //       return this.defaultUnicastSocket?.send(payload, locator.port, locator.address);
+  //     }),
+  //   );
+  // }
 
   private async _createUdpSocket(
     port: number,
@@ -382,7 +382,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
 
   private async _createMulticastUdpSocket(
     port: number,
-    address: string | undefined,
+    _address: string | undefined,
     messageHandler: MessageHandler,
   ): Promise<UdpSocket> {
     const socket = await this.udpSocketCreate({ type: "udp4" });
