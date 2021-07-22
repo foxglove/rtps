@@ -1,6 +1,4 @@
-import { ParameterId } from "./ParameterId";
 import { RtpsMessageView } from "./RtpsMessageView";
-import { SubMessageId } from "./SubMessage";
 import {
   VendorId,
   BuiltinEndpointSet,
@@ -10,6 +8,8 @@ import {
   LocatorKind,
   Reliability,
   EntityKind,
+  SubMessageId,
+  ParameterId,
 } from "./enums";
 import { hasBuiltinEndpoint } from "./hasBuiltinEndpoint";
 import { DataMsgView, InfoTsView } from "./submessages";
@@ -69,7 +69,7 @@ describe("RtpsMessageView", () => {
     expect(dataMsg.octetsToNextHeader).toEqual(248);
     expect(dataMsg.readerEntityId).toEqual({ key: 16, kind: EntityKind.AppdefUnknown });
     expect(dataMsg.writerEntityId).toEqual({ key: 0, kind: EntityKind.AppdefUnknown });
-    expect(dataMsg.writerSeqNumber).toEqual({ high: 0, low: 1 });
+    expect(dataMsg.writerSeqNumber).toEqual(1n);
     expect(dataMsg.encapsulationKind).toEqual(EncapsulationKind.PL_CDR_LE);
     expect(dataMsg.encapsulationOptions).toEqual(0);
     expect(dataMsg.serializedData[0]).toEqual(0);

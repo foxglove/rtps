@@ -1,4 +1,4 @@
-import { Duration, fromDate, Time } from "@foxglove/rostime";
+import { fromDate, Time } from "@foxglove/rostime";
 import { EventEmitter } from "eventemitter3";
 
 import {
@@ -17,42 +17,45 @@ import { Parameters } from "./Parameters";
 import { ParametersView } from "./ParametersView";
 import { RtpsMessage } from "./RtpsMessage";
 import { RtpsMessageView } from "./RtpsMessageView";
-import { SequenceNumber } from "./SequenceNumber";
-import { SubMessageId } from "./SubMessage";
-import { BuiltinEndpointSet, VendorId } from "./enums";
+import { RtpsParticipantView } from "./RtpsParticipantView";
+import { BuiltinEndpointSet, SubMessageId, VendorId } from "./enums";
 import { UdpRemoteInfo, UdpSocket, UdpSocketCreate } from "./networkTypes";
-import { DataMsg, DataMsgView, InfoDst, InfoTs } from "./submessages";
-import { ProtocolVersion } from "./types";
-
-export type SpdpDiscoveredParticipantData = {
-  timestamp?: Time;
-  guidPrefix: GuidPrefix;
-  protocolVersion: ProtocolVersion;
-  vendorId: VendorId;
-  expectsInlineQoS: boolean;
-  metatrafficUnicastLocatorList: Locator[];
-  metatrafficMulticastLocatorList: Locator[];
-  defaultUnicastLocatorList: Locator[];
-  defaultMulticastLocatorList: Locator[];
-  availableBuiltinEndpoints: BuiltinEndpointSet;
-  leaseDuration: Duration;
-};
+import {
+  AckNack,
+  AckNackView,
+  DataMsg,
+  DataMsgView,
+  HeartbeatView,
+  InfoDst,
+  InfoTs,
+} from "./submessages";
+import {
+  AckNackData,
+  HeartbeatData,
+  DiscoveredParticipantData,
+  UserData,
+  DiscoveredTopicData,
+} from "./types";
 
 export interface RtpsParticipantEvents {
   error: (error: Error) => void;
-  discoveredParticipant: (participant: SpdpDiscoveredParticipantData) => void;
+  discoveredParticipant: (participant: DiscoveredParticipantData) => void;
+  discoveredTopic: (topic: DiscoveredTopicData) => void;
+  heartbeat: (heartbeat: HeartbeatData) => void;
+  ackNack: (ackNack: AckNackData) => void;
+  userData: (userData: UserData) => void;
 }
 
 type MessageHandler = (data: Uint8Array, rinfo: UdpRemoteInfo) => void;
 
 const builtinEndpoints =
-  BuiltinEndpointSet.ParticipantAnnouncer |
+  // BuiltinEndpointSet.ParticipantAnnouncer |
   BuiltinEndpointSet.ParticipantDetector |
-  BuiltinEndpointSet.PublicationAnnouncer |
+  // BuiltinEndpointSet.PublicationAnnouncer |
   BuiltinEndpointSet.PublicationDetector |
-  BuiltinEndpointSet.SubscriptionAnnouncer |
+  // BuiltinEndpointSet.SubscriptionAnnouncer |
   BuiltinEndpointSet.SubscriptionDetector |
-  BuiltinEndpointSet.ParticipantMessageDataWriter |
+  // BuiltinEndpointSet.ParticipantMessageDataWriter |
   BuiltinEndpointSet.ParticipantMessageDataReader;
 
 export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
@@ -70,6 +73,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
   defaultMulticastSocket?: UdpSocket;
   metatrafficUnicastLocator?: Locator;
   defaultUnicastLocator?: Locator;
+  participants = new Map<string, RtpsParticipantView>();
 
   constructor(options: {
     name: string;
@@ -123,6 +127,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     this.log?.debug?.("shutting down");
     this.running = false;
     this.removeAllListeners();
+    this.participants.clear();
 
     this.metatrafficUnicastSocket?.close();
     this.metatrafficMulticastSocket?.close();
@@ -131,7 +136,6 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
   }
 
   async sendParticipantData(
-    destLocator: Locator,
     destGuidPrefix: GuidPrefix,
     timestamp: Time = fromDate(new Date()),
   ): Promise<void> {
@@ -158,7 +162,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     const dataMsg = new DataMsg(
       EntityId.BuiltinParticipantReader,
       EntityId.BuiltinParticipantWriter,
-      SequenceNumber.fromBigInt(1n),
+      1n,
       parameters.data,
       false,
       true,
@@ -171,11 +175,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     msg.writeSubmessage(infoTs);
     msg.writeSubmessage(dataMsg);
 
-    const data = msg.data;
-    this.log?.debug?.(
-      `Sending ${data.length} byte participant data message to ${destLocator} (${destGuidPrefix})`,
-    );
-    await this.metatrafficUnicastSocket?.send(msg.data, destLocator.port, destLocator.address);
+    await this._sendMetatrafficTo(msg, destGuidPrefix);
   }
 
   private _handleError = (err: Error): void => {
@@ -207,19 +207,42 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
 
       this.log?.debug?.(`[SUBMSG] ${SubMessageId[msg.submessageId]}`);
 
-      if (msg.submessageId === SubMessageId.DATA) {
+      if (msg.submessageId === SubMessageId.HEARTBEAT) {
+        const heartbeat = msg as HeartbeatView;
+        void this._handleHeartbeat({
+          guidPrefix: message.guidPrefix,
+          readerEntityId: heartbeat.readerEntityId,
+          writerEntityId: heartbeat.writerEntityId,
+          firstAvailableSeqNumber: heartbeat.firstAvailableSeqNumber,
+          lastSeqNumber: heartbeat.lastSeqNumber,
+          count: heartbeat.count,
+        });
+      } else if (msg.submessageId === SubMessageId.ACKNACK) {
+        const ackNack = msg as AckNackView;
+        this._handleAckNack({
+          guidPrefix: message.guidPrefix,
+          readerEntityId: ackNack.readerEntityId,
+          writerEntityId: ackNack.writerEntityId,
+          readerSNState: ackNack.readerSNState,
+          count: ackNack.count,
+          final: ackNack.final,
+        });
+      } else if (msg.submessageId === SubMessageId.DATA) {
         const dataMsg = msg as DataMsgView;
         const params = dataMsg.parameters();
         if (params != undefined) {
           // meta message
-          const otherParticipant = parseParticipant(params, message.guidPrefix);
-          if (otherParticipant != undefined) {
-            this.emit("discoveredParticipant", otherParticipant);
-          } else {
-            console.error(`parseParticipant failed`);
-          }
+          this._handleMetaData(message.guidPrefix, params, msg.effectiveTimestamp);
         } else {
-          // user message
+          // user data
+          this._handleUserData({
+            timestamp: msg.effectiveTimestamp,
+            guidPrefix: message.guidPrefix,
+            readerEntityId: dataMsg.readerEntityId,
+            writerEntityId: dataMsg.writerEntityId,
+            writerSeqNumber: dataMsg.writerSeqNumber,
+            serializedData: dataMsg.serializedData,
+          });
         }
       }
     }
@@ -230,6 +253,118 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
       `Received ${data.length} byte default message from ${rinfo.address}:${rinfo.port}`,
     );
   };
+
+  private _handleHeartbeat = async (heartbeat: HeartbeatData): Promise<void> => {
+    this.emit("heartbeat", heartbeat);
+
+    const destGuidPrefix = heartbeat.guidPrefix;
+    const participant = this.participants.get(destGuidPrefix.toString());
+    if (participant == undefined) {
+      this.log?.warn?.(`Received heartbeat from unknown participant ${destGuidPrefix}`);
+      return;
+    }
+
+    const endpoint = participant.endpoints.get(heartbeat.writerEntityId.value);
+    if (endpoint == undefined) {
+      this.log?.warn?.(
+        `Received heartbeat from participant ${destGuidPrefix} for unknown endpoint ${heartbeat.writerEntityId}`,
+      );
+      return;
+    }
+
+    const sequenceNumSet = endpoint.history.getMissingSequenceNums(
+      heartbeat.firstAvailableSeqNumber,
+      heartbeat.lastSeqNumber,
+    );
+
+    // Submessages
+    const infoDst = new InfoDst(destGuidPrefix);
+    const ackNack = new AckNack(
+      endpoint.readerEntityId,
+      endpoint.writerEntityId,
+      sequenceNumSet,
+      ++endpoint.ackNackCount,
+      false,
+    );
+
+    // RTPS message
+    const msg = new RtpsMessage({ guidPrefix: this.guidPrefix });
+    msg.writeSubmessage(infoDst);
+    msg.writeSubmessage(ackNack);
+
+    await this._sendMetatrafficTo(msg, destGuidPrefix);
+  };
+
+  private _handleAckNack = (ackNack: AckNackData): void => {
+    this.emit("ackNack", ackNack);
+  };
+
+  private _handleMetaData = (
+    guidPrefix: GuidPrefix,
+    params: ParametersView,
+    timestamp?: Time | undefined,
+  ): void => {
+    const participantData = parseParticipant(params, guidPrefix);
+    if (participantData != undefined) {
+      this.participants.set(guidPrefix.toString(), new RtpsParticipantView(participantData));
+      this.emit("discoveredParticipant", participantData);
+      return;
+    }
+
+    const topicData = parseTopic(params, guidPrefix, timestamp);
+    if (topicData != undefined) {
+      // this.topics.set(topicData.endpointGuid.toString(), new TopicView(topicData));
+      this.emit("discoveredTopic", topicData);
+      return;
+    }
+
+    const count = params.allParameters().size;
+    this.log?.warn?.(`Unparseable participant from ${guidPrefix} with ${count} parameters`);
+    return;
+  };
+
+  private _handleUserData = (userData: UserData): void => {
+    this.emit("userData", userData);
+  };
+
+  private async _sendMetatrafficTo(msg: RtpsMessage, destGuidPrefix: GuidPrefix): Promise<void> {
+    this.log?.debug?.(`Sending metatraffic message to ${destGuidPrefix}`);
+    const participant = this.participants.get(destGuidPrefix.toString());
+    if (participant == undefined) {
+      this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);
+      return;
+    }
+
+    const locators = participant.metatrafficUnicastLocatorList;
+    const payload = msg.data;
+    await Promise.all(
+      locators.map((locator) => {
+        this.log?.debug?.(
+          `Sending ${payload.length} bytes of metatraffic to ${locator} (${destGuidPrefix})`,
+        );
+        return this.metatrafficUnicastSocket?.send(payload, locator.port, locator.address);
+      }),
+    );
+  }
+
+  private async _sendDefaultTo(msg: RtpsMessage, destGuidPrefix: GuidPrefix): Promise<void> {
+    const participant = this.participants.get(destGuidPrefix.toString());
+    if (participant == undefined) {
+      this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);
+      return;
+    }
+
+    const locators = participant.defaultUnicastLocatorList;
+    const payload = msg.data;
+    await Promise.all(
+      locators.map((locator) => {
+        this.log?.debug?.(
+          `Sending ${payload.length} bytes of user data to ${locator} (${destGuidPrefix})`,
+        );
+        return this.defaultUnicastSocket?.send(payload, locator.port, locator.address);
+      }),
+    );
+  }
 
   private async _createUdpSocket(
     port: number,
@@ -253,10 +388,10 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     const socket = await this.udpSocketCreate({ type: "udp4" });
     socket.on("error", this._handleError);
     socket.on("message", messageHandler);
-    await socket.bind({ port, address });
+    await socket.bind({ port });
     await socket.setBroadcast(true);
     await socket.setMulticastTTL(64);
-    await socket.addMembership(MULTICAST_IPv4, address);
+    await socket.addMembership(MULTICAST_IPv4);
     const bound = await socket.localAddress();
     this.log?.debug?.(
       `Listening on UDP multicast ${MULTICAST_IPv4}:${bound?.port} (interface ${bound?.address})`,
@@ -269,7 +404,7 @@ function parseParticipant(
   params: ParametersView,
   guidPrefix: GuidPrefix,
   timestamp?: Time,
-): SpdpDiscoveredParticipantData | undefined {
+): DiscoveredParticipantData | undefined {
   const protocolVersion = params.protocolVersion();
   const vendorId = params.vendorId();
   const expectsInlineQoS = params.expectsInlineQoS();
@@ -279,6 +414,7 @@ function parseParticipant(
   const defaultMulticastLocator = params.defaultMulticastLocator();
   const availableBuiltinEndpoints = params.builtinEndpointSet();
   const leaseDuration = params.participantLeaseDuration();
+  const userData = params.userDataString();
 
   if (
     protocolVersion == undefined ||
@@ -310,6 +446,47 @@ function parseParticipant(
     defaultMulticastLocatorList,
     availableBuiltinEndpoints,
     leaseDuration,
+    userData,
+  };
+}
+
+function parseTopic(
+  params: ParametersView,
+  guidPrefix: GuidPrefix,
+  timestamp?: Time,
+): DiscoveredTopicData | undefined {
+  const topicName = params.topicName();
+  const typeName = params.typeName();
+  const reliability = params.reliability();
+  const history = params.history();
+  const protocolVersion = params.protocolVersion();
+  const vendorId = params.vendorId();
+  const endpointGuid = params.endpointGuid();
+  const userData = params.userDataString();
+
+  if (
+    topicName == undefined ||
+    typeName == undefined ||
+    reliability == undefined ||
+    history == undefined ||
+    protocolVersion == undefined ||
+    vendorId == undefined ||
+    endpointGuid == undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    timestamp,
+    guidPrefix,
+    topicName,
+    typeName,
+    reliability,
+    history,
+    protocolVersion,
+    vendorId,
+    endpointGuid,
+    userData,
   };
 }
 

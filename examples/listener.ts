@@ -1,4 +1,4 @@
-import { RtpsParticipant, selectIPv4, SpdpDiscoveredParticipantData } from "../src";
+import { RtpsParticipant, selectIPv4, DiscoveredParticipantData } from "../src";
 import { getNetworkInterfaces, UdpSocketNode } from "../src/nodejs";
 
 async function main() {
@@ -12,15 +12,18 @@ async function main() {
   });
   await participant.start();
 
-  const other = await new Promise<SpdpDiscoveredParticipantData>((resolve, reject) => {
+  const other = await new Promise<DiscoveredParticipantData>((resolve, reject) => {
     participant.once("discoveredParticipant", resolve);
     participant.once("error", reject);
   });
 
-  console.dir(other);
-  const locator = other.metatrafficUnicastLocatorList[0]!;
+  participant.on("discoveredTopic", (topic) => {
+    console.dir(topic);
+  });
 
-  await participant.sendParticipantData(locator, other.guidPrefix);
+  console.dir(other);
+
+  await participant.sendParticipantData(other.guidPrefix);
 
   await new Promise((r) => setTimeout(r, 10000));
 

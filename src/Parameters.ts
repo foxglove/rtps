@@ -3,8 +3,7 @@ import { Duration } from "@foxglove/rostime";
 
 import { Guid } from "./Guid";
 import { Locator } from "./Locator";
-import { ParameterId } from "./ParameterId";
-import { BuiltinEndpointSet, VendorId } from "./enums";
+import { BuiltinEndpointSet, ParameterId, VendorId } from "./enums";
 import { ProtocolVersion } from "./types";
 
 const textEncoder = new TextEncoder();
