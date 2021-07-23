@@ -4,7 +4,7 @@ import { Time } from "@foxglove/rostime";
 import { EntityId } from "../EntityId";
 import { GuidPrefix } from "../GuidPrefix";
 import { ParametersView } from "../ParametersView";
-import { sequenceNumberFromData, sequenceNumberToData } from "../SequenceNumber";
+import { SequenceNumber, sequenceNumberFromData, sequenceNumberToData } from "../SequenceNumber";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
 import { EncapsulationKind, LittleEndian, SubMessageId } from "../enums";
@@ -17,7 +17,7 @@ export class DataMsg implements SubMessage {
   constructor(
     public readerEntityId: EntityId,
     public writerEntityId: EntityId,
-    public writerSeqNumber: bigint,
+    public writerSeqNumber: SequenceNumber,
     public serializedData: Uint8Array,
     public inlineQoS: boolean,
     public dataPresent: boolean,
@@ -69,14 +69,14 @@ export class DataMsgView extends SubMessageView {
   }
 
   get readerEntityId(): EntityId {
-    return EntityId.fromData(this.view, this.offset + 4);
-  }
-
-  get writerEntityId(): EntityId {
     return EntityId.fromData(this.view, this.offset + 8);
   }
 
-  get writerSeqNumber(): bigint {
+  get writerEntityId(): EntityId {
+    return EntityId.fromData(this.view, this.offset + 12);
+  }
+
+  get writerSeqNumber(): SequenceNumber {
     return sequenceNumberFromData(this.view, this.offset + 16, this.littleEndian);
   }
 

@@ -8,6 +8,7 @@ import {
   userMulticastPort,
   userUnicastPort,
 } from "./Discovery";
+import { Endpoint } from "./Endpoint";
 import { EntityId } from "./EntityId";
 import { Guid } from "./Guid";
 import { GuidPrefix } from "./GuidPrefix";
@@ -18,7 +19,8 @@ import { ParametersView } from "./ParametersView";
 import { RtpsMessage } from "./RtpsMessage";
 import { RtpsMessageView } from "./RtpsMessageView";
 import { RtpsParticipantView } from "./RtpsParticipantView";
-import { BuiltinEndpointSet, SubMessageId, VendorId } from "./enums";
+import { Topic } from "./Topic";
+import { BuiltinEndpointSet, ChangeKind, SubMessageId, VendorId } from "./enums";
 import { UdpRemoteInfo, UdpSocket, UdpSocketCreate } from "./networkTypes";
 import {
   AckNack,
@@ -29,20 +31,12 @@ import {
   InfoDst,
   InfoTs,
 } from "./submessages";
-import {
-  AckNackData,
-  HeartbeatData,
-  DiscoveredParticipantData,
-  UserData,
-  DiscoveredTopicData,
-} from "./types";
+import { DiscoveredParticipantData, UserData, DiscoveredTopicData } from "./types";
 
 export interface RtpsParticipantEvents {
   error: (error: Error) => void;
   discoveredParticipant: (participant: DiscoveredParticipantData) => void;
   discoveredTopic: (topic: DiscoveredTopicData) => void;
-  heartbeat: (heartbeat: HeartbeatData) => void;
-  ackNack: (ackNack: AckNackData) => void;
   userData: (userData: UserData) => void;
 }
 
@@ -205,45 +199,14 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
         continue;
       }
 
-      this.log?.debug?.(`[SUBMSG] ${SubMessageId[msg.submessageId]}`);
+      this.log?.debug?.(` [SUBMSG] ${SubMessageId[msg.submessageId]}`);
 
       if (msg.submessageId === SubMessageId.HEARTBEAT) {
-        const heartbeat = msg as HeartbeatView;
-        void this._handleHeartbeat({
-          guidPrefix: message.guidPrefix,
-          readerEntityId: heartbeat.readerEntityId,
-          writerEntityId: heartbeat.writerEntityId,
-          firstAvailableSeqNumber: heartbeat.firstAvailableSeqNumber,
-          lastSeqNumber: heartbeat.lastSeqNumber,
-          count: heartbeat.count,
-        });
+        this._handleHeartbeat(message.guidPrefix, msg as HeartbeatView);
       } else if (msg.submessageId === SubMessageId.ACKNACK) {
-        const ackNack = msg as AckNackView;
-        this._handleAckNack({
-          guidPrefix: message.guidPrefix,
-          readerEntityId: ackNack.readerEntityId,
-          writerEntityId: ackNack.writerEntityId,
-          readerSNState: ackNack.readerSNState,
-          count: ackNack.count,
-          final: ackNack.final,
-        });
+        this._handleAckNack(message.guidPrefix, msg as AckNackView);
       } else if (msg.submessageId === SubMessageId.DATA) {
-        const dataMsg = msg as DataMsgView;
-        const params = dataMsg.parameters();
-        if (params != undefined) {
-          // meta message
-          this._handleMetaData(message.guidPrefix, params, msg.effectiveTimestamp);
-        } else {
-          // user data
-          this._handleUserData({
-            timestamp: msg.effectiveTimestamp,
-            guidPrefix: message.guidPrefix,
-            readerEntityId: dataMsg.readerEntityId,
-            writerEntityId: dataMsg.writerEntityId,
-            writerSeqNumber: dataMsg.writerSeqNumber,
-            serializedData: dataMsg.serializedData,
-          });
-        }
+        this._handleDataMsg(message.guidPrefix, msg as DataMsgView);
       }
     }
   };
@@ -254,21 +217,11 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     );
   };
 
-  private _handleHeartbeat = async (heartbeat: HeartbeatData): Promise<void> => {
-    this.emit("heartbeat", heartbeat);
-
-    const destGuidPrefix = heartbeat.guidPrefix;
-    const participant = this.participants.get(destGuidPrefix.toString());
-    if (participant == undefined) {
-      this.log?.warn?.(`Received heartbeat from unknown participant ${destGuidPrefix}`);
-      return;
-    }
-
-    const endpoint = participant.endpoints.get(heartbeat.writerEntityId.value);
+  private _handleHeartbeat = (guidPrefix: GuidPrefix, heartbeat: HeartbeatView): void => {
+    const entityId = heartbeat.writerEntityId;
+    const endpoint = this._getEndpoint(guidPrefix, heartbeat.writerEntityId);
     if (endpoint == undefined) {
-      this.log?.warn?.(
-        `Received heartbeat from participant ${destGuidPrefix} for unknown endpoint ${heartbeat.writerEntityId}`,
-      );
+      this.log?.warn?.(`Received heartbeat for unknown guid ${guidPrefix}${entityId}`);
       return;
     }
 
@@ -277,14 +230,18 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
       heartbeat.lastSeqNumber,
     );
 
+    if (heartbeat.final && sequenceNumSet.empty()) {
+      return;
+    }
+
     // Submessages
-    const infoDst = new InfoDst(destGuidPrefix);
+    const infoDst = new InfoDst(guidPrefix);
     const ackNack = new AckNack(
       endpoint.readerEntityId,
       endpoint.writerEntityId,
       sequenceNumSet,
-      ++endpoint.ackNackCount,
-      false,
+      ++endpoint.participant.ackNackCount,
+      true,
     );
 
     // RTPS message
@@ -292,43 +249,131 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     msg.writeSubmessage(infoDst);
     msg.writeSubmessage(ackNack);
 
-    await this._sendMetatrafficTo(msg, destGuidPrefix);
+    void this._sendMetatrafficTo(msg, guidPrefix);
   };
 
-  private _handleAckNack = (ackNack: AckNackData): void => {
-    this.emit("ackNack", ackNack);
+  private _handleAckNack = (_guidPrefix: GuidPrefix, _ackNack: AckNackView): void => {
+    // no-op for now
+  };
+
+  private _handleDataMsg = (guidPrefix: GuidPrefix, dataMsg: DataMsgView): void => {
+    const timestamp = dataMsg.effectiveTimestamp;
+
+    // Record this message into a HistoryCache if it belongs to an endpoint we're tracking
+    const endpoint = this._getEndpoint(guidPrefix, dataMsg.writerEntityId);
+    if (endpoint != undefined) {
+      this._recordChange(guidPrefix, dataMsg, endpoint);
+    }
+
+    const params = dataMsg.parameters();
+    if (params != undefined) {
+      // meta message
+      this._handleMetaData(
+        guidPrefix,
+        dataMsg.readerEntityId,
+        dataMsg.writerEntityId,
+        params,
+        timestamp,
+      );
+    } else if (endpoint instanceof Topic) {
+      // user data
+      this.emit("userData", {
+        timestamp,
+        topic: endpoint.topicData,
+        writerSeqNumber: dataMsg.writerSeqNumber,
+        serializedData: dataMsg.serializedData,
+      });
+    } else if (endpoint != undefined) {
+      // TODO: Figure out what to do with this. BuiltinParticipantMessageWriter
+      const guid = new Guid(guidPrefix, dataMsg.writerEntityId);
+      this.log?.info?.(`Received ${dataMsg.serializedData.length} byte DATA message for ${guid}`);
+    } else {
+      const guid = new Guid(guidPrefix, dataMsg.writerEntityId);
+      this.log?.warn?.(`Received DATA message for unknown endpoint ${guid}`);
+    }
   };
 
   private _handleMetaData = (
     guidPrefix: GuidPrefix,
+    readerEntityId: EntityId,
+    writerEntityId: EntityId,
     params: ParametersView,
     timestamp?: Time | undefined,
   ): void => {
+    // Check if the parameters describe a participant
     const participantData = parseParticipant(params, guidPrefix);
     if (participantData != undefined) {
-      this.participants.set(guidPrefix.toString(), new RtpsParticipantView(participantData));
-      this.emit("discoveredParticipant", participantData);
+      const guidPrefixStr = guidPrefix.toString();
+      let participant = this.participants.get(guidPrefixStr);
+      if (participant == undefined) {
+        this.log?.info?.(`Tracking participant ${guidPrefixStr}`);
+        participant = new RtpsParticipantView(participantData);
+        this.participants.set(guidPrefixStr, participant);
+        this.emit("discoveredParticipant", participantData);
+      } else {
+        this.log?.info?.(`Already tracking participant ${guidPrefixStr}`);
+      }
       return;
     }
 
+    // Check if the parameters describe a topic
     const topicData = parseTopic(params, guidPrefix, timestamp);
     if (topicData != undefined) {
-      // this.topics.set(topicData.endpointGuid.toString(), new TopicView(topicData));
-      this.emit("discoveredTopic", topicData);
+      const participant = this.participants.get(guidPrefix.toString());
+      if (participant != undefined) {
+        const topicEntityId = topicData.endpointGuid.entityId;
+
+        // Create this topic if it doesn't exist yet
+        let endpoint = participant.endpoints.get(topicEntityId.value);
+        if (endpoint == undefined) {
+          this.log?.info?.(`Tracking topic "${topicData.topicName}" (${topicData.typeName})`);
+          endpoint = new Topic({ participant, readerEntityId, writerEntityId, topicData }); // FIX!
+          participant.endpoints.set(topicEntityId.value, endpoint);
+          this.emit("discoveredTopic", topicData);
+        } else {
+          this.log?.info?.(
+            `Already tracking topic "${topicData.topicName}" (${topicData.typeName})`,
+          );
+        }
+      } else {
+        this.log?.warn?.(
+          `Received message on topic "${topicData.topicName}" from unknown participant ${guidPrefix}`,
+        );
+        return;
+      }
+
       return;
     }
 
+    // Got a DATA ParameterList that doesn't describe a participant or a topic, log a warning
     const count = params.allParameters().size;
-    this.log?.warn?.(`Unparseable participant from ${guidPrefix} with ${count} parameters`);
+    this.log?.warn?.(
+      `Unparseable ParameterList from ${guidPrefix} with ${count} parameters:\n${params.allParameters()}`,
+    );
     return;
   };
 
-  private _handleUserData = (userData: UserData): void => {
-    this.emit("userData", userData);
-  };
+  private _recordChange(guidPrefix: GuidPrefix, dataMsg: DataMsgView, endpoint: Endpoint) {
+    const writerGuid = new Guid(guidPrefix, dataMsg.writerEntityId);
+    const sequenceNumber = dataMsg.writerSeqNumber;
+    const serializedData = dataMsg.serializedData;
+    this.log?.debug?.(
+      `  DATA: ${serializedData.length} bytes (seq ${sequenceNumber}) from ${writerGuid} (history is size ${endpoint.history.size})`,
+    );
+    endpoint.history.add(sequenceNumber, {
+      timestamp: dataMsg.effectiveTimestamp ?? fromDate(new Date()),
+      kind: ChangeKind.Alive,
+      writerGuid,
+      sequenceNumber,
+      data: serializedData,
+    });
+  }
+
+  private _getEndpoint(guidPrefix: GuidPrefix, entityId: EntityId): Endpoint | undefined {
+    return this.participants.get(guidPrefix.toString())?.endpoints.get(entityId.value);
+  }
 
   private async _sendMetatrafficTo(msg: RtpsMessage, destGuidPrefix: GuidPrefix): Promise<void> {
-    this.log?.debug?.(`Sending metatraffic message to ${destGuidPrefix}`);
     const participant = this.participants.get(destGuidPrefix.toString());
     if (participant == undefined) {
       this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);

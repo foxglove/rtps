@@ -18,14 +18,15 @@ export class AckNack implements SubMessage {
   write(output: DataView, offset: number, littleEndian: boolean): number {
     let flags = littleEndian ? LittleEndian : 0;
     flags |= this.final ? Final : 0;
+    const sequenceSetSize = this.readerSNState.size;
     output.setUint8(offset, SubMessageId.ACKNACK);
     output.setUint8(offset + 1, flags); // flags
-    output.setUint16(offset + 2, 28, littleEndian); // octetsToNextHeader
+    output.setUint16(offset + 2, 12 + sequenceSetSize, littleEndian); // octetsToNextHeader
     this.readerEntityId.write(output, offset + 4);
     this.writerEntityId.write(output, offset + 8);
     this.readerSNState.write(output, offset + 12, littleEndian);
-    output.setUint32(offset + 28, this.count, littleEndian);
-    return 32;
+    output.setUint32(offset + 12 + sequenceSetSize, this.count, littleEndian);
+    return 12 + sequenceSetSize + 4;
   }
 }
 

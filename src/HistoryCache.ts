@@ -1,13 +1,18 @@
 import { CacheChange } from "./CacheChange";
+import { SequenceNumber } from "./SequenceNumber";
 import { SequenceNumberSet } from "./SequenceNumberSet";
 
 export class HistoryCache {
   // TODO: remove() could be sped up by using a sorted data structure
-  private map_ = new Map<bigint, CacheChange>();
-  private min_?: bigint;
-  private max_?: bigint;
+  private map_ = new Map<SequenceNumber, CacheChange>();
+  private min_?: SequenceNumber;
+  private max_?: SequenceNumber;
 
-  add(sequenceNum: bigint, change: CacheChange): void {
+  get size(): number {
+    return this.map_.size;
+  }
+
+  add(sequenceNum: SequenceNumber, change: CacheChange): void {
     this.map_.set(sequenceNum, change);
     if (this.min_ == undefined || sequenceNum < this.min_) {
       this.min_ = sequenceNum;
@@ -17,7 +22,7 @@ export class HistoryCache {
     }
   }
 
-  remove(sequenceNum: bigint): boolean {
+  remove(sequenceNum: SequenceNumber): boolean {
     if (this.map_.delete(sequenceNum)) {
       if (sequenceNum === this.min_) {
         this.min_ = this._findMin();
@@ -30,34 +35,41 @@ export class HistoryCache {
     return false;
   }
 
-  get(sequenceNum: bigint): CacheChange | undefined {
+  get(sequenceNum: SequenceNumber): CacheChange | undefined {
     return this.map_.get(sequenceNum);
   }
 
-  getSequenceNumMin(): bigint | undefined {
+  getSequenceNumMin(): SequenceNumber | undefined {
     return this.min_;
   }
 
-  getSequenceNumMax(): bigint | undefined {
+  getSequenceNumMax(): SequenceNumber | undefined {
     return this.max_;
   }
 
-  getMissingSequenceNums(firstSeqNumber: bigint, lastSeqNumber: bigint): SequenceNumberSet {
+  getMissingSequenceNums(
+    firstSeqNumber: SequenceNumber,
+    lastSeqNumber: SequenceNumber,
+  ): SequenceNumberSet {
     if (lastSeqNumber < firstSeqNumber) {
       throw new Error(`Invalid sequence number range [${firstSeqNumber}, ${lastSeqNumber}]`);
     }
-    const numBits = Math.min(Number(lastSeqNumber - firstSeqNumber), 256);
+    // FIXME: This is not correct. base should be set to the first missing sequence number, or
+    // lastSeqNumber + 1. numBits is only non-zero if there are misses
+    const numBits = Math.min(1 + Number(lastSeqNumber - firstSeqNumber), 256);
     const set = new SequenceNumberSet(firstSeqNumber, numBits);
-    for (let seq = firstSeqNumber; seq < lastSeqNumber; seq++) {
+    let hasAll = true;
+    for (let seq = firstSeqNumber; seq <= lastSeqNumber; seq++) {
       if (!this.map_.has(seq)) {
         set.add(seq);
+        hasAll = false;
       }
     }
-    return set;
+    return hasAll ? new SequenceNumberSet(lastSeqNumber + 1n, 0) : set;
   }
 
-  private _findMin(): bigint | undefined {
-    let min: bigint | undefined;
+  private _findMin(): SequenceNumber | undefined {
+    let min: SequenceNumber | undefined;
     for (const seq of this.map_.keys()) {
       if (min == undefined || seq < min) {
         min = seq;
@@ -66,8 +78,8 @@ export class HistoryCache {
     return min;
   }
 
-  private _findMax(): bigint | undefined {
-    let max: bigint | undefined;
+  private _findMax(): SequenceNumber | undefined {
+    let max: SequenceNumber | undefined;
     for (const seq of this.map_.keys()) {
       if (max == undefined || seq > max) {
         max = seq;

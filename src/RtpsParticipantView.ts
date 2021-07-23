@@ -4,6 +4,7 @@ import { Endpoint } from "./Endpoint";
 import { EntityId } from "./EntityId";
 import { GuidPrefix } from "./GuidPrefix";
 import { Locator } from "./Locator";
+import { Topic } from "./Topic";
 import { BuiltinEndpointSet, VendorId } from "./enums";
 import { hasBuiltinEndpoint } from "./hasBuiltinEndpoint";
 import { ProtocolVersion, DiscoveredParticipantData } from "./types";
@@ -19,7 +20,9 @@ export class RtpsParticipantView {
   defaultMulticastLocatorList: Locator[];
   availableBuiltinEndpoints: BuiltinEndpointSet;
   leaseDuration: Duration;
-  endpoints = new Map<number, Endpoint>();
+  endpoints = new Map<number, Endpoint>(); // entityId -> Endpoint
+  topicsMap = new Map<string, Topic>(); // topicName -> Topic
+  ackNackCount = 0;
 
   constructor(data: DiscoveredParticipantData) {
     this.guidPrefix = data.guidPrefix;
@@ -33,26 +36,35 @@ export class RtpsParticipantView {
     this.availableBuiltinEndpoints = data.availableBuiltinEndpoints;
     this.leaseDuration = data.leaseDuration;
 
-    const endpoints = data.availableBuiltinEndpoints;
-    if (hasBuiltinEndpoint(endpoints, BuiltinEndpointSet.PublicationAnnouncer)) {
+    const endpointsAvailable = data.availableBuiltinEndpoints;
+    if (hasBuiltinEndpoint(endpointsAvailable, BuiltinEndpointSet.PublicationAnnouncer)) {
       this.endpoints.set(
         EntityId.BuiltinPublicationsWriter.value,
-        new Endpoint(EntityId.BuiltinPublicationsReader, EntityId.BuiltinPublicationsWriter),
+        new Endpoint({
+          participant: this,
+          readerEntityId: EntityId.BuiltinPublicationsReader,
+          writerEntityId: EntityId.BuiltinPublicationsWriter,
+        }),
       );
     }
-    if (hasBuiltinEndpoint(endpoints, BuiltinEndpointSet.SubscriptionAnnouncer)) {
+    if (hasBuiltinEndpoint(endpointsAvailable, BuiltinEndpointSet.SubscriptionAnnouncer)) {
       this.endpoints.set(
         EntityId.BuiltinSubscriptionsWriter.value,
-        new Endpoint(EntityId.BuiltinSubscriptionsReader, EntityId.BuiltinSubscriptionsWriter),
+        new Endpoint({
+          participant: this,
+          readerEntityId: EntityId.BuiltinSubscriptionsReader,
+          writerEntityId: EntityId.BuiltinSubscriptionsWriter,
+        }),
       );
     }
-    if (hasBuiltinEndpoint(endpoints, BuiltinEndpointSet.ParticipantMessageDataWriter)) {
+    if (hasBuiltinEndpoint(endpointsAvailable, BuiltinEndpointSet.ParticipantMessageDataWriter)) {
       this.endpoints.set(
         EntityId.BuiltinParticipantMessageWriter.value,
-        new Endpoint(
-          EntityId.BuiltinParticipantMessageReader,
-          EntityId.BuiltinParticipantMessageWriter,
-        ),
+        new Endpoint({
+          participant: this,
+          readerEntityId: EntityId.BuiltinParticipantMessageReader,
+          writerEntityId: EntityId.BuiltinParticipantMessageWriter,
+        }),
       );
     }
   }

@@ -1,14 +1,14 @@
-import { sequenceNumberToData } from "./SequenceNumber";
+import { SequenceNumber, sequenceNumberToData } from "./SequenceNumber";
 
 const MAX_BITS = 256;
 const MAX_ITEMS = 8;
 
 export class SequenceNumberSet {
-  private base_: bigint;
+  private base_: SequenceNumber;
   private numBits_: number;
   private bitmap_: Uint32Array;
 
-  get base(): bigint {
+  get base(): SequenceNumber {
     return this.base_;
   }
 
@@ -25,7 +25,7 @@ export class SequenceNumberSet {
     return 8 + 4 + numLongs * 4;
   }
 
-  constructor(base: bigint, numBits: number, bitmap?: Uint32Array) {
+  constructor(base: SequenceNumber, numBits: number, bitmap?: Uint32Array) {
     this.base_ = base;
     this.numBits_ = Math.min(numBits, MAX_BITS);
     this.bitmap_ = new Uint32Array(MAX_ITEMS);
@@ -38,7 +38,7 @@ export class SequenceNumberSet {
     return this.numBits_ === 0;
   }
 
-  add(sequenceNum: bigint): boolean {
+  add(sequenceNum: SequenceNumber): boolean {
     const idx = Number(sequenceNum - this.base_);
     if (idx < 0 || idx >= MAX_BITS) {
       return false;
@@ -54,11 +54,11 @@ export class SequenceNumberSet {
     output.setUint32(offset + 8, this.numBits_, littleEndian);
     const numLongs = this.size;
     for (let i = 0; i < numLongs; i++) {
-      output.setUint32(offset + 12 + i * 4, this.bitmap_[i] ?? 0, littleEndian);
+      output.setUint32(offset + 12 + i * 4, this.bitmap_[i]!, littleEndian);
     }
   }
 
-  *sequenceNumbers(): Generator<bigint> {
+  *sequenceNumbers(): Generator<SequenceNumber> {
     let offset = 0;
     let idx = 0;
     for (let i = 0; i < this.numBits_; i += 32) {

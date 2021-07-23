@@ -1,15 +1,23 @@
 import { EntityId } from "./EntityId";
 import { HistoryCache } from "./HistoryCache";
+import { RtpsParticipantView } from "./RtpsParticipantView";
+
+export type EndpointOpts = {
+  participant: RtpsParticipantView;
+  readerEntityId: EntityId;
+  writerEntityId: EntityId;
+};
 
 export class Endpoint {
+  participant: RtpsParticipantView;
   readerEntityId: EntityId;
   writerEntityId: EntityId;
   history: HistoryCache;
-  ackNackCount = 0;
 
-  constructor(readerEntityId: EntityId, writerEntityId: EntityId) {
-    this.readerEntityId = readerEntityId;
-    this.writerEntityId = writerEntityId;
+  constructor(opts: EndpointOpts) {
+    this.participant = opts.participant;
+    this.readerEntityId = opts.readerEntityId;
+    this.writerEntityId = opts.writerEntityId;
     this.history = new HistoryCache();
   }
 }

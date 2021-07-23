@@ -69,7 +69,6 @@
   "dependencies": {
     "@foxglove/cdr": "^1.1.0",
     "@foxglove/rostime": "^1.1.0",
-    "eventemitter3": "^4.0.7",
-    "md5-typescript": "^1.0.5"
+    "eventemitter3": "^4.0.7"
   }
 }

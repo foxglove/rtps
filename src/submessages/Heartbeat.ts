@@ -1,5 +1,5 @@
 import { EntityId } from "../EntityId";
-import { sequenceNumberFromData, sequenceNumberToData } from "../SequenceNumber";
+import { SequenceNumber, sequenceNumberFromData, sequenceNumberToData } from "../SequenceNumber";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
 import { LittleEndian, SubMessageId } from "../enums";
@@ -11,8 +11,8 @@ export class Heartbeat implements SubMessage {
   constructor(
     public readerEntityId: EntityId,
     public writerEntityId: EntityId,
-    public firstAvailableSeqNumber: bigint,
-    public lastSeqNumber: bigint,
+    public firstAvailableSeqNumber: SequenceNumber,
+    public lastSeqNumber: SequenceNumber,
     public count: number,
     public final: boolean,
     public liveliness: boolean,
@@ -51,11 +51,11 @@ export class HeartbeatView extends SubMessageView {
     return EntityId.fromData(this.view, this.offset + 8);
   }
 
-  get firstAvailableSeqNumber(): bigint {
+  get firstAvailableSeqNumber(): SequenceNumber {
     return sequenceNumberFromData(this.view, this.offset + 12, this.littleEndian);
   }
 
-  get lastSeqNumber(): bigint {
+  get lastSeqNumber(): SequenceNumber {
     return sequenceNumberFromData(this.view, this.offset + 20, this.littleEndian);
   }
 
