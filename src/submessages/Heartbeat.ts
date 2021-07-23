@@ -1,6 +1,8 @@
 import { EntityId } from "../EntityId";
-import { LittleEndian, SubMessage, SubMessageId } from "../SubMessage";
+import { sequenceNumberFromData, sequenceNumberToData } from "../SequenceNumber";
+import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
+import { LittleEndian, SubMessageId } from "../enums";
 import { Final } from "./AckNack";
 
 export const Liveliness = 1 << 2;
@@ -25,8 +27,8 @@ export class Heartbeat implements SubMessage {
     output.setUint16(offset + 2, 28, littleEndian); // octetsToNextHeader
     this.readerEntityId.write(output, offset + 4);
     this.writerEntityId.write(output, offset + 8);
-    output.setBigUint64(offset + 12, this.firstAvailableSeqNumber, littleEndian);
-    output.setBigUint64(offset + 20, this.lastSeqNumber, littleEndian);
+    sequenceNumberToData(this.firstAvailableSeqNumber, output, offset + 12, littleEndian);
+    sequenceNumberToData(this.lastSeqNumber, output, offset + 20, littleEndian);
     output.setUint32(offset + 28, this.count, littleEndian);
     return 32;
   }
@@ -50,11 +52,11 @@ export class HeartbeatView extends SubMessageView {
   }
 
   get firstAvailableSeqNumber(): bigint {
-    return this.view.getBigUint64(this.offset + 12, this.littleEndian);
+    return sequenceNumberFromData(this.view, this.offset + 12, this.littleEndian);
   }
 
   get lastSeqNumber(): bigint {
-    return this.view.getBigUint64(this.offset + 20, this.littleEndian);
+    return sequenceNumberFromData(this.view, this.offset + 20, this.littleEndian);
   }
 
   get count(): number {

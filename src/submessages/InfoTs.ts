@@ -1,7 +1,8 @@
 import { Time } from "@foxglove/rostime";
 
-import { LittleEndian, SubMessage, SubMessageId } from "../SubMessage";
+import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
+import { LittleEndian, SubMessageId } from "../enums";
 
 const DATA_LENGTH = 8;
 

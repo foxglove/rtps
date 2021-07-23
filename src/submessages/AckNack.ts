@@ -1,7 +1,8 @@
 import { EntityId } from "../EntityId";
-import { ReaderSNState } from "../ReaderSNState";
-import { LittleEndian, SubMessage, SubMessageId } from "../SubMessage";
+import { SequenceNumberSet } from "../SequenceNumberSet";
+import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
+import { LittleEndian, SubMessageId } from "../enums";
 
 export const Final = 1 << 1;
 
@@ -9,7 +10,7 @@ export class AckNack implements SubMessage {
   constructor(
     public readerEntityId: EntityId,
     public writerEntityId: EntityId,
-    public readerSNState: ReaderSNState,
+    public readerSNState: SequenceNumberSet,
     public count: number,
     public final: boolean,
   ) {}
@@ -41,8 +42,8 @@ export class AckNackView extends SubMessageView {
     return EntityId.fromData(this.view, this.offset + 8);
   }
 
-  get readerSNState(): ReaderSNState {
-    return ReaderSNState.fromData(this.view, this.offset + 12, this.littleEndian);
+  get readerSNState(): SequenceNumberSet {
+    return SequenceNumberSet.fromData(this.view, this.offset + 12, this.littleEndian);
   }
 
   get count(): number {

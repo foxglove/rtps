@@ -5,9 +5,15 @@ import { DurabilityService } from "./DurabilityService";
 import { EntityId } from "./EntityId";
 import { Guid } from "./Guid";
 import { Locator } from "./Locator";
-import { ParameterId } from "./ParameterId";
-import { BuiltinEndpointSet, Durability, History, Reliability, VendorId } from "./enums";
-import { ProtocolVersion } from "./types";
+import {
+  BuiltinEndpointSet,
+  Durability,
+  History,
+  ParameterId,
+  Reliability,
+  VendorId,
+} from "./enums";
+import { HistoryAndDepth, ProtocolVersion } from "./types";
 
 const textDecoder = new TextDecoder();
 
@@ -44,12 +50,24 @@ export class ParametersView {
     return textDecoder.decode(data);
   }
 
+  topicName(): string | undefined {
+    return this.map.get(ParameterId.PID_TOPIC_NAME) as string | undefined;
+  }
+
+  typeName(): string | undefined {
+    return this.map.get(ParameterId.PID_TYPE_NAME) as string | undefined;
+  }
+
   durability(): Durability | undefined {
     return this.map.get(ParameterId.PID_DURABILITY) as Durability | undefined;
   }
 
   reliability(): Reliability | undefined {
     return this.map.get(ParameterId.PID_RELIABILITY) as Reliability | undefined;
+  }
+
+  history(): HistoryAndDepth | undefined {
+    return this.map.get(ParameterId.PID_HISTORY) as HistoryAndDepth | undefined;
   }
 
   builtinEndpointSet(): BuiltinEndpointSet | undefined {
@@ -62,6 +80,10 @@ export class ParametersView {
 
   vendorId(): VendorId | undefined {
     return this.map.get(ParameterId.PID_VENDORID) as VendorId | undefined;
+  }
+
+  endpointGuid(): Guid | undefined {
+    return this.map.get(ParameterId.PID_ENDPOINT_GUID) as Guid | undefined;
   }
 
   participantLeaseDuration(): Duration | undefined {

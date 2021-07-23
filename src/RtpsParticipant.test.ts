@@ -12,7 +12,7 @@ describe("RtpsParticipant", () => {
       addresses: [address],
       participantId: 1,
       udpSocketCreate: UdpSocketNode.Create,
-      log: console,
+      // log: console,
     });
     await participant.start();
     expect(participant.defaultUnicastSocket).toBeDefined();

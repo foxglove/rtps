@@ -15,6 +15,10 @@ export class Guid {
     this.entityId.toCDR(writer);
   }
 
+  toString(): string {
+    return this.guidPrefix.toString() + this.entityId.toString();
+  }
+
   static fromCDR(reader: CdrReader): Guid {
     return new Guid(GuidPrefix.fromCDR(reader), EntityId.fromCDR(reader));
   }

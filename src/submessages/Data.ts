@@ -4,10 +4,10 @@ import { Time } from "@foxglove/rostime";
 import { EntityId } from "../EntityId";
 import { GuidPrefix } from "../GuidPrefix";
 import { ParametersView } from "../ParametersView";
-import { SequenceNumber } from "../SequenceNumber";
-import { LittleEndian, SubMessage, SubMessageId } from "../SubMessage";
+import { sequenceNumberFromData, sequenceNumberToData } from "../SequenceNumber";
+import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
-import { EncapsulationKind } from "../enums";
+import { EncapsulationKind, LittleEndian, SubMessageId } from "../enums";
 
 export const InlineQoS = 1 << 1;
 export const DataPresent = 1 << 2;
@@ -17,7 +17,7 @@ export class DataMsg implements SubMessage {
   constructor(
     public readerEntityId: EntityId,
     public writerEntityId: EntityId,
-    public writerSeqNumber: SequenceNumber,
+    public writerSeqNumber: bigint,
     public serializedData: Uint8Array,
     public inlineQoS: boolean,
     public dataPresent: boolean,
@@ -39,7 +39,7 @@ export class DataMsg implements SubMessage {
     output.setUint16(offset + 6, 16, littleEndian); // octetsToInlineQoS
     this.readerEntityId.write(output, offset + 8);
     this.writerEntityId.write(output, offset + 12);
-    this.writerSeqNumber.write(output, offset + 16, littleEndian);
+    sequenceNumberToData(this.writerSeqNumber, output, offset + 16, littleEndian);
 
     new Uint8Array(output.buffer, payloadOffset, payloadLength).set(this.serializedData);
     return 24 + payloadLength;
@@ -76,8 +76,8 @@ export class DataMsgView extends SubMessageView {
     return EntityId.fromData(this.view, this.offset + 8);
   }
 
-  get writerSeqNumber(): SequenceNumber {
-    return SequenceNumber.fromData(this.view, this.offset + 16, this.littleEndian);
+  get writerSeqNumber(): bigint {
+    return sequenceNumberFromData(this.view, this.offset + 16, this.littleEndian);
   }
 
   get encapsulationKind(): EncapsulationKind {

@@ -1,9 +1,8 @@
 import { Time } from "@foxglove/rostime";
 
 import { GuidPrefix } from "./GuidPrefix";
-import { SubMessageId } from "./SubMessage";
 import { SubMessageView } from "./SubMessageView";
-import { VendorId } from "./enums";
+import { SubMessageId, VendorId } from "./enums";
 import {
   AckNackView,
   DataMsgView,

@@ -1,32 +1,24 @@
-export class SequenceNumber {
-  static None = new SequenceNumber(0, 0);
-  static Unknown = new SequenceNumber(-1, 0);
+export const SequenceNumberNone = 0n;
+export const SequenceNumberUnknown = -1n << 32n;
 
-  constructor(public high: number, public low: number) {
-    if (low < 0) {
-      throw new Error(
-        `Low value of SequenceNumber cannot be negative, got { high: ${high}, low: ${low} }`,
-      );
-    }
-  }
+export function sequenceNumberFromData(
+  view: DataView,
+  offset: number,
+  littleEndian: boolean,
+): bigint {
+  const high = view.getInt32(offset, littleEndian);
+  const low = view.getInt32(offset + 4, littleEndian);
+  return (BigInt(high) << 32n) | BigInt(low);
+}
 
-  write(output: DataView, offset: number, littleEndian: boolean): void {
-    output.setInt32(offset, this.high, littleEndian);
-    output.setUint32(offset + 4, this.low, littleEndian);
-  }
-
-  asBigInt(): bigint {
-    return (BigInt(this.high) << 32n) | BigInt(this.low);
-  }
-
-  static fromData(view: DataView, offset: number, littleEndian: boolean): SequenceNumber {
-    return new SequenceNumber(
-      view.getInt32(offset, littleEndian),
-      view.getUint32(offset + 4, littleEndian),
-    );
-  }
-
-  static fromBigInt(value: bigint): SequenceNumber {
-    return new SequenceNumber(Number(value >> 32n), Number(value & 0xffffffffn));
-  }
+export function sequenceNumberToData(
+  value: bigint,
+  view: DataView,
+  offset: number,
+  littleEndian: boolean,
+): void {
+  const high = Number(value >> 32n);
+  const low = Number(value & 0xffffffffn);
+  view.setInt32(offset, high, littleEndian);
+  view.setUint32(offset + 4, low, littleEndian);
 }
