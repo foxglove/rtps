@@ -67,8 +67,8 @@ describe("RtpsMessageView", () => {
     expect(dataMsg.submessageId).toEqual(SubMessageId.DATA);
     expect(dataMsg.littleEndian).toEqual(true);
     expect(dataMsg.octetsToNextHeader).toEqual(248);
-    expect(dataMsg.readerEntityId).toEqual({ key: 16, kind: EntityKind.AppdefUnknown });
-    expect(dataMsg.writerEntityId).toEqual({ key: 0, kind: EntityKind.AppdefUnknown });
+    expect(dataMsg.readerEntityId).toEqual({ key: 0, kind: EntityKind.AppdefUnknown });
+    expect(dataMsg.writerEntityId).toEqual({ key: 0x0100, kind: EntityKind.BuiltinWriterWithKey });
     expect(dataMsg.writerSeqNumber).toEqual(1n);
     expect(dataMsg.encapsulationKind).toEqual(EncapsulationKind.PL_CDR_LE);
     expect(dataMsg.encapsulationOptions).toEqual(0);
