@@ -1,13 +1,13 @@
-import { RtpsParticipant } from "./RtpsParticipant";
+import { Participant } from "./Participant";
 import { getNetworkInterfaces, UdpSocketNode } from "./nodejs";
 import { selectIPv4 } from "./selectIP";
 
 jest.setTimeout(1000 * 10);
 
-describe("RtpsParticipant", () => {
+describe("Participant", () => {
   it("should work", async () => {
     const address = selectIPv4(getNetworkInterfaces());
-    const participant = new RtpsParticipant({
+    const participant = new Participant({
       name: "test",
       addresses: [address],
       participantId: 1,

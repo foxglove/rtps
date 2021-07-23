@@ -9,7 +9,7 @@ import { BuiltinEndpointSet, VendorId } from "./enums";
 import { hasBuiltinEndpoint } from "./hasBuiltinEndpoint";
 import { ProtocolVersion, DiscoveredParticipantData } from "./types";
 
-export class RtpsParticipantView {
+export class ParticipantView {
   guidPrefix: GuidPrefix;
   protocolVersion: ProtocolVersion;
   vendorId: VendorId;

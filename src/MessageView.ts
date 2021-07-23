@@ -14,7 +14,7 @@ import {
 import { toHex } from "./toHex";
 import { ProtocolVersion } from "./types";
 
-export class RtpsMessageView {
+export class MessageView {
   readonly data: Readonly<Uint8Array>;
   readonly view: Readonly<DataView>;
 

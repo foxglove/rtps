@@ -1,15 +1,15 @@
 import { EntityId } from "./EntityId";
 import { HistoryCache } from "./HistoryCache";
-import { RtpsParticipantView } from "./RtpsParticipantView";
+import { ParticipantView } from "./ParticipantView";
 
 export type EndpointOpts = {
-  participant: RtpsParticipantView;
+  participant: ParticipantView;
   readerEntityId: EntityId;
   writerEntityId: EntityId;
 };
 
 export class Endpoint {
-  participant: RtpsParticipantView;
+  participant: ParticipantView;
   readerEntityId: EntityId;
   writerEntityId: EntityId;
   history: HistoryCache;

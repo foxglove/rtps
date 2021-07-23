@@ -14,11 +14,11 @@ import { Guid } from "./Guid";
 import { GuidPrefix } from "./GuidPrefix";
 import { Locator } from "./Locator";
 import { LoggerService } from "./LoggerService";
+import { Message } from "./Message";
+import { MessageView } from "./MessageView";
 import { Parameters } from "./Parameters";
 import { ParametersView } from "./ParametersView";
-import { RtpsMessage } from "./RtpsMessage";
-import { RtpsMessageView } from "./RtpsMessageView";
-import { RtpsParticipantView } from "./RtpsParticipantView";
+import { ParticipantView } from "./ParticipantView";
 import { Topic } from "./Topic";
 import { BuiltinEndpointSet, ChangeKind, SubMessageId, VendorId } from "./enums";
 import { UdpRemoteInfo, UdpSocket, UdpSocketCreate } from "./networkTypes";
@@ -33,7 +33,7 @@ import {
 } from "./submessages";
 import { DiscoveredParticipantData, UserData, DiscoveredTopicData } from "./types";
 
-export interface RtpsParticipantEvents {
+export interface ParticipantEvents {
   error: (error: Error) => void;
   discoveredParticipant: (participant: DiscoveredParticipantData) => void;
   discoveredTopic: (topic: DiscoveredTopicData) => void;
@@ -52,7 +52,7 @@ const builtinEndpoints =
   // BuiltinEndpointSet.ParticipantMessageDataWriter |
   BuiltinEndpointSet.ParticipantMessageDataReader;
 
-export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
+export class Participant extends EventEmitter<ParticipantEvents> {
   name: string;
   participantId: number;
   domainId: number;
@@ -67,7 +67,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
   defaultMulticastSocket?: UdpSocket;
   metatrafficUnicastLocator?: Locator;
   defaultUnicastLocator?: Locator;
-  participants = new Map<string, RtpsParticipantView>();
+  participants = new Map<string, ParticipantView>();
 
   constructor(options: {
     name: string;
@@ -164,7 +164,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     );
 
     // RTPS message
-    const msg = new RtpsMessage({ guidPrefix: this.guidPrefix });
+    const msg = new Message({ guidPrefix: this.guidPrefix });
     msg.writeSubmessage(infoDst);
     msg.writeSubmessage(infoTs);
     msg.writeSubmessage(dataMsg);
@@ -184,7 +184,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
       `Received ${data.length} byte metatraffic message from ${rinfo.address}:${rinfo.port}`,
     );
 
-    const message = new RtpsMessageView(data);
+    const message = new MessageView(data);
     const version = message.protocolVersion;
     if (version.major !== 2) {
       const { major, minor } = version;
@@ -245,7 +245,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     );
 
     // RTPS message
-    const msg = new RtpsMessage({ guidPrefix: this.guidPrefix });
+    const msg = new Message({ guidPrefix: this.guidPrefix });
     msg.writeSubmessage(infoDst);
     msg.writeSubmessage(ackNack);
 
@@ -307,7 +307,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
       let participant = this.participants.get(guidPrefixStr);
       if (participant == undefined) {
         this.log?.info?.(`Tracking participant ${guidPrefixStr}`);
-        participant = new RtpsParticipantView(participantData);
+        participant = new ParticipantView(participantData);
         this.participants.set(guidPrefixStr, participant);
         this.emit("discoveredParticipant", participantData);
       } else {
@@ -373,7 +373,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     return this.participants.get(guidPrefix.toString())?.endpoints.get(entityId.value);
   }
 
-  private async _sendMetatrafficTo(msg: RtpsMessage, destGuidPrefix: GuidPrefix): Promise<void> {
+  private async _sendMetatrafficTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
     const participant = this.participants.get(destGuidPrefix.toString());
     if (participant == undefined) {
       this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);
@@ -392,7 +392,7 @@ export class RtpsParticipant extends EventEmitter<RtpsParticipantEvents> {
     );
   }
 
-  // private async _sendDefaultTo(msg: RtpsMessage, destGuidPrefix: GuidPrefix): Promise<void> {
+  // private async _sendDefaultTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
   //   const participant = this.participants.get(destGuidPrefix.toString());
   //   if (participant == undefined) {
   //     this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);

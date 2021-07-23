@@ -1,9 +1,9 @@
-import { RtpsParticipant, selectIPv4, DiscoveredParticipantData } from "../src";
+import { Participant, selectIPv4, DiscoveredParticipantData } from "../src";
 import { getNetworkInterfaces, UdpSocketNode } from "../src/nodejs";
 
 async function main() {
   const address = selectIPv4(getNetworkInterfaces());
-  const participant = new RtpsParticipant({
+  const participant = new Participant({
     name: "listener",
     addresses: [address],
     participantId: 1,

@@ -3,7 +3,7 @@ import { SubMessage } from "./SubMessage";
 import { VendorId } from "./enums";
 import { ProtocolVersion } from "./types";
 
-export type RtpsMessageOptions = {
+export type MessageOptions = {
   guidPrefix: GuidPrefix;
   bigEndian?: boolean;
   protocolVersion?: ProtocolVersion;
@@ -11,7 +11,7 @@ export type RtpsMessageOptions = {
   maxSize?: number;
 };
 
-export class RtpsMessage {
+export class Message {
   private littleEndian: boolean;
   private buffer: ArrayBuffer;
   private view: DataView;
@@ -21,7 +21,7 @@ export class RtpsMessage {
     return new Uint8Array(this.buffer, 0, this.offset);
   }
 
-  constructor(opts: RtpsMessageOptions) {
+  constructor(opts: MessageOptions) {
     this.littleEndian = !(opts.bigEndian === true);
     this.buffer = new ArrayBuffer(opts.maxSize ?? 1500);
     this.view = new DataView(this.buffer);

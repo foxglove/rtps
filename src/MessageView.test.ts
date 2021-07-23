@@ -1,4 +1,4 @@
-import { RtpsMessageView } from "./RtpsMessageView";
+import { MessageView } from "./MessageView";
 import {
   VendorId,
   BuiltinEndpointSet,
@@ -14,7 +14,7 @@ import {
 import { hasBuiltinEndpoint } from "./hasBuiltinEndpoint";
 import { DataMsgView, InfoTsView } from "./submessages";
 
-describe("RtpsMessageView", () => {
+describe("MessageView", () => {
   it("parses an example RTPS message", () => {
     const data = new Uint8Array([
       0x52, 0x54, 0x50, 0x53, 0x02, 0x01, 0x01, 0x10, 0x5a, 0xb8, 0x10, 0x01, 0x16, 0x36, 0xc7,
@@ -37,7 +37,7 @@ describe("RtpsMessageView", () => {
       0x2e, 0x30, 0x2f, 0x44, 0x61, 0x72, 0x77, 0x69, 0x6e, 0x2f, 0x44, 0x61, 0x72, 0x77, 0x69,
       0x6e, 0x00, 0x19, 0x80, 0x04, 0x00, 0x00, 0x00, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00,
     ]);
-    const view = new RtpsMessageView(data);
+    const view = new MessageView(data);
     expect(view.data).toBe(data);
     expect(view.protocolVersion).toEqual({ major: 2, minor: 1 });
     expect(view.vendorId).toEqual(VendorId.EclipseCycloneDDS);
@@ -146,7 +146,7 @@ describe("RtpsMessageView", () => {
       0x01, 0x00, 0x00, 0x00, 0x03, 0x80, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
       0x00,
     ]);
-    const view = new RtpsMessageView(data);
+    const view = new MessageView(data);
     expect(view.data).toBe(data);
     expect(view.protocolVersion).toEqual({ major: 2, minor: 1 });
     expect(view.vendorId).toEqual(VendorId.EclipseCycloneDDS);
