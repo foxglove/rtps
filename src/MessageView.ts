@@ -1,6 +1,6 @@
 import { Time } from "@foxglove/rostime";
 
-import { GuidPrefix } from "./GuidPrefix";
+import { GuidPrefix, guidPrefixFromData } from "./GuidPrefix";
 import { SubMessageView } from "./SubMessageView";
 import { SubMessageId, VendorId } from "./enums";
 import {
@@ -44,7 +44,7 @@ export class MessageView {
   }
 
   get guidPrefix(): GuidPrefix {
-    return GuidPrefix.fromData(this.view, 8);
+    return guidPrefixFromData(this.view, 8);
   }
 
   subMessages(): SubMessageView[] {

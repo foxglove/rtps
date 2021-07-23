@@ -15,8 +15,8 @@ import {
   EntityIdBuiltinParticipantWriter,
   EntityIdParticipant,
 } from "./EntityId";
-import { Guid } from "./Guid";
-import { GuidPrefix } from "./GuidPrefix";
+import { guidParts, makeGuid } from "./Guid";
+import { generateGuidPrefix, GuidPrefix } from "./GuidPrefix";
 import { Locator } from "./Locator";
 import { LoggerService } from "./LoggerService";
 import { Message } from "./Message";
@@ -88,7 +88,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this.name = options.name;
     this.participantId = options.participantId;
     this.domainId = options.domainId ?? 0;
-    this.guidPrefix = options.guidPrefix ?? GuidPrefix.random();
+    this.guidPrefix = options.guidPrefix ?? generateGuidPrefix();
     this.addresses = options.addresses;
     this.udpSocketCreate = options.udpSocketCreate;
     this.log = options.log;
@@ -148,7 +148,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     parameters.protocolVersion({ major: 2, minor: 1 });
     parameters.vendorId(VendorId.EclipseCycloneDDS);
     parameters.participantLeaseDuration({ sec: 10, nsec: 0 });
-    parameters.participantGuid(new Guid(this.guidPrefix, EntityIdParticipant));
+    parameters.participantGuid(makeGuid(this.guidPrefix, EntityIdParticipant));
     parameters.builtinEndpointSet(builtinEndpoints);
     parameters.domainId(this.domainId);
     parameters.defaultUnicastLocator(this.defaultUnicastLocator);
@@ -199,7 +199,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     const subMessages = message.subMessages();
     for (const msg of subMessages) {
-      if (!(msg.effectiveGuidPrefix?.equals(this.guidPrefix) ?? true)) {
+      if (msg.effectiveGuidPrefix != undefined && msg.effectiveGuidPrefix !== this.guidPrefix) {
         // This is not our message
         continue;
       }
@@ -290,10 +290,10 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       });
     } else if (endpoint != undefined) {
       // TODO: Figure out what to do with this. BuiltinParticipantMessageWriter
-      const guid = new Guid(guidPrefix, dataMsg.writerEntityId);
+      const guid = makeGuid(guidPrefix, dataMsg.writerEntityId);
       this.log?.info?.(`Received ${dataMsg.serializedData.length} byte DATA message for ${guid}`);
     } else {
-      const guid = new Guid(guidPrefix, dataMsg.writerEntityId);
+      const guid = makeGuid(guidPrefix, dataMsg.writerEntityId);
       this.log?.warn?.(`Received DATA message for unknown endpoint ${guid}`);
     }
   };
@@ -326,7 +326,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     if (topicData != undefined) {
       const participant = this.participants.get(guidPrefix.toString());
       if (participant != undefined) {
-        const topicEntityId = topicData.endpointGuid.entityId;
+        const [_, topicEntityId] = guidParts(topicData.endpointGuid);
 
         // Create this topic if it doesn't exist yet
         let endpoint = participant.endpoints.get(topicEntityId);
@@ -359,7 +359,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   };
 
   private _recordChange(guidPrefix: GuidPrefix, dataMsg: DataMsgView, endpoint: Endpoint) {
-    const writerGuid = new Guid(guidPrefix, dataMsg.writerEntityId);
+    const writerGuid = makeGuid(guidPrefix, dataMsg.writerEntityId);
     const sequenceNumber = dataMsg.writerSeqNumber;
     const serializedData = dataMsg.serializedData;
     this.log?.debug?.(

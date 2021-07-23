@@ -1,4 +1,4 @@
-import { GuidPrefix } from "./GuidPrefix";
+import { GuidPrefix, writeGuidPrefix } from "./GuidPrefix";
 import { SubMessage } from "./SubMessage";
 import { VendorId } from "./enums";
 import { ProtocolVersion } from "./types";
@@ -33,7 +33,7 @@ export class Message {
     this.view.setUint8(4, protocolVersion.major);
     this.view.setUint8(5, protocolVersion.minor);
     this.view.setUint16(6, vendorId, false);
-    opts.guidPrefix.write(this.view, 8);
+    writeGuidPrefix(opts.guidPrefix, this.view, 8);
     this.offset = 20;
   }
 

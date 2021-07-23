@@ -3,7 +3,7 @@ import { Duration } from "@foxglove/rostime";
 
 import { DurabilityService } from "./DurabilityService";
 import { entityIdFromCDR } from "./EntityId";
-import { Guid } from "./Guid";
+import { Guid, guidFromCDR } from "./Guid";
 import { Locator } from "./Locator";
 import {
   BuiltinEndpointSet,
@@ -189,11 +189,11 @@ function getParameterValue(id: ParameterId, length: number, reader: CdrReader): 
       return { sec: reader.int32(), nsec: reader.uint32() };
     // case ParameterId.PID_CONTENT_FILTER_PROPERTY:
     case ParameterId.PID_PARTICIPANT_GUID:
-      return Guid.fromCDR(reader);
+      return guidFromCDR(reader);
     case ParameterId.PID_PARTICIPANT_ENTITYID:
       return entityIdFromCDR(reader);
     case ParameterId.PID_GROUP_GUID:
-      return Guid.fromCDR(reader);
+      return guidFromCDR(reader);
     case ParameterId.PID_GROUP_ENTITYID:
       return entityIdFromCDR(reader);
     case ParameterId.PID_BUILTIN_ENDPOINT_SET:
@@ -205,7 +205,7 @@ function getParameterValue(id: ParameterId, length: number, reader: CdrReader): 
     // case ParameterId.PID_KEY_HASH:
     // case ParameterId.PID_STATUS_INFO:
     case ParameterId.PID_ENDPOINT_GUID:
-      return Guid.fromCDR(reader);
+      return guidFromCDR(reader);
     // case ParameterId.PID_CONTENT_FILTER_INFO:
     // case ParameterId.PID_COHERENT_SET:
     // case ParameterId.PID_DIRECTED_WRITE:

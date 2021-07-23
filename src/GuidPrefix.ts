@@ -2,52 +2,53 @@ import { CdrReader, CdrWriter } from "@foxglove/cdr";
 
 import { uint32ToHex } from "./toHex";
 
-export class GuidPrefix {
-  constructor(public hostId: number, public appId: number, public instanceId: number) {}
+export type GuidPrefix = string; // 24 hex characters
 
-  equals(other: GuidPrefix): boolean {
-    return (
-      this.hostId === other.hostId &&
-      this.appId === other.appId &&
-      this.instanceId === other.instanceId
-    );
-  }
+export function makeGuidPrefix(hostId: number, appId: number, instanceId: number): GuidPrefix {
+  return uint32ToHex(hostId) + uint32ToHex(appId) + uint32ToHex(instanceId);
+}
 
-  write(output: DataView, offset: number): void {
-    output.setUint32(offset, this.hostId, false);
-    output.setUint32(offset + 4, this.appId, false);
-    output.setUint32(offset + 8, this.instanceId, false);
-  }
+export function generateGuidPrefix(): GuidPrefix {
+  const hostId = Math.floor(Math.random() * Math.pow(2, 32));
+  const appId = Math.floor(Math.random() * Math.pow(2, 32));
+  const instanceId = Math.floor(Math.random() * Math.pow(2, 32));
+  return makeGuidPrefix(hostId, appId, instanceId);
+}
 
-  toCDR(writer: CdrWriter): void {
-    writer.uint32BE(this.hostId);
-    writer.uint32BE(this.appId);
-    writer.uint32BE(this.instanceId);
-  }
+export function guidPrefixFromData(view: DataView, offset: number): GuidPrefix {
+  return makeGuidPrefix(
+    view.getUint32(offset, false),
+    view.getUint32(offset + 4, false),
+    view.getUint32(offset + 8, false),
+  );
+}
 
-  toString(): string {
-    return uint32ToHex(this.hostId) + uint32ToHex(this.appId) + uint32ToHex(this.instanceId);
-  }
+export function guidPrefixFromCDR(reader: CdrReader): GuidPrefix {
+  return makeGuidPrefix(reader.uint32BE(), reader.uint32BE(), reader.uint32BE());
+}
 
-  static fromData(view: DataView, offset: number): GuidPrefix {
-    return new GuidPrefix(
-      view.getUint32(offset, false),
-      view.getUint32(offset + 4, false),
-      view.getUint32(offset + 8, false),
-    );
+export function writeGuidPrefix(guidPrefix: GuidPrefix, output: DataView, offset: number): void {
+  if (guidPrefix.length !== 24) {
+    throw new Error(`Invalid guidPrefix "${guidPrefix}"`);
   }
+  const hostId = parseInt(guidPrefix.slice(0, 8), 16);
+  const appId = parseInt(guidPrefix.slice(8, 16), 16);
+  const instanceId = parseInt(guidPrefix.slice(16, 24), 16);
 
-  static fromCDR(reader: CdrReader): GuidPrefix {
-    return new GuidPrefix(reader.uint32BE(), reader.uint32BE(), reader.uint32BE());
-  }
+  output.setUint32(offset, hostId, false);
+  output.setUint32(offset + 4, appId, false);
+  output.setUint32(offset + 8, instanceId, false);
+}
 
-  static random(): GuidPrefix {
-    const hostId = 0x11111111;
-    const appId = 0x22222222;
-    const instanceId = 0x33333333;
-    // const hostId = Math.floor(Math.random() * Math.pow(2, 32));
-    // const appId = Math.floor(Math.random() * Math.pow(2, 32));
-    // const instanceId = Math.floor(Math.random() * Math.pow(2, 32));
-    return new GuidPrefix(hostId, appId, instanceId);
+export function writeGuidPrefixToCDR(guidPrefix: GuidPrefix, output: CdrWriter): void {
+  if (guidPrefix.length !== 24) {
+    throw new Error(`Invalid guidPrefix "${guidPrefix}"`);
   }
+  const hostId = parseInt(guidPrefix.slice(0, 8), 16);
+  const appId = parseInt(guidPrefix.slice(8, 16), 16);
+  const instanceId = parseInt(guidPrefix.slice(16, 24), 16);
+
+  output.uint32BE(hostId);
+  output.uint32BE(appId);
+  output.uint32BE(instanceId);
 }

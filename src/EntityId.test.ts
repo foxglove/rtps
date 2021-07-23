@@ -3,6 +3,7 @@ import { CdrReader, CdrWriter } from "@foxglove/cdr";
 import {
   entityIdFromCDR,
   entityIdFromData,
+  entityIdFromString,
   makeEntityId,
   writeEntityId,
   writeEntityIdToCDR,
@@ -15,6 +16,12 @@ describe("EntityId", () => {
     expect(makeEntityId(0, EntityKind.AppdefParticipant)).toEqual(1);
     expect(makeEntityId(1, EntityKind.AppdefUnknown)).toEqual(0x000100);
     expect(makeEntityId(0xabcdef, 0x12)).toEqual(0xabcdef12);
+  });
+
+  it("entityIdFromString", () => {
+    expect(entityIdFromString("00000000")).toEqual(0);
+    expect(entityIdFromString("00000001")).toEqual(1);
+    expect(entityIdFromString("abcdef12")).toEqual(0xabcdef12);
   });
 
   it("entityIdFromData", () => {

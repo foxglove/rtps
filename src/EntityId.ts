@@ -19,6 +19,10 @@ export function makeEntityId(key: number, kind: EntityKind): EntityId {
   return ((key << 8) | kind) >>> 0;
 }
 
+export function entityIdFromString(value: string): EntityId {
+  return parseInt(value, 16);
+}
+
 export function entityIdFromData(view: DataView, offset: number): EntityId {
   return view.getUint32(offset, false);
 }

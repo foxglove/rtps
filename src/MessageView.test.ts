@@ -1,4 +1,5 @@
 import { EntityIdBuiltinParticipantWriter, EntityIdParticipant } from "./EntityId";
+import { Guid, guidParts } from "./Guid";
 import { MessageView } from "./MessageView";
 import {
   VendorId,
@@ -41,11 +42,7 @@ describe("MessageView", () => {
     expect(view.data).toBe(data);
     expect(view.protocolVersion).toEqual({ major: 2, minor: 1 });
     expect(view.vendorId).toEqual(VendorId.EclipseCycloneDDS);
-    expect(view.guidPrefix).toEqual({
-      hostId: 0x5ab81001,
-      appId: 0x1636c7d5,
-      instanceId: 0x1895c54e,
-    });
+    expect(view.guidPrefix).toEqual("5ab810011636c7d51895c54e");
     const subMessages = view.subMessages();
     expect(subMessages).toHaveLength(2);
 
@@ -92,10 +89,10 @@ describe("MessageView", () => {
     expect(allParams.get(ParameterId.PID_PROTOCOL_VERSION)).toEqual({ major: 2, minor: 1 });
     expect(allParams.get(ParameterId.PID_VENDORID)).toEqual(VendorId.EclipseCycloneDDS);
     expect(allParams.get(ParameterId.PID_PARTICIPANT_LEASE_DURATION)).toEqual({ sec: 10, nsec: 0 });
-    expect(allParams.get(ParameterId.PID_PARTICIPANT_GUID)).toEqual({
-      guidPrefix: { hostId: 0x5ab81001, appId: 0x1636c7d5, instanceId: 0x1895c54e },
-      entityId: EntityIdParticipant,
-    });
+    expect(guidParts(allParams.get(ParameterId.PID_PARTICIPANT_GUID) as Guid)).toEqual([
+      "5ab810011636c7d51895c54e",
+      EntityIdParticipant,
+    ]);
     const endpointSet = allParams.get(ParameterId.PID_BUILTIN_ENDPOINT_SET) as BuiltinEndpointSet;
     expect(hasBuiltinEndpoint(endpointSet, BuiltinEndpointSet.ParticipantAnnouncer)).toEqual(true);
     expect(hasBuiltinEndpoint(endpointSet, BuiltinEndpointSet.ParticipantDetector)).toEqual(true);
@@ -150,11 +147,7 @@ describe("MessageView", () => {
     expect(view.data).toBe(data);
     expect(view.protocolVersion).toEqual({ major: 2, minor: 1 });
     expect(view.vendorId).toEqual(VendorId.EclipseCycloneDDS);
-    expect(view.guidPrefix).toEqual({
-      hostId: 0x54a61001,
-      appId: 0x319843ec,
-      instanceId: 0xa3669a35,
-    });
+    expect(view.guidPrefix).toEqual("54a61001319843eca3669a35");
     const subMessages = view.subMessages();
     expect(subMessages).toHaveLength(2);
 
@@ -176,14 +169,10 @@ describe("MessageView", () => {
     expect(allParams.get(ParameterId.PID_HISTORY)).toEqual({ kind: History.KeepLast, depth: 1000 });
     expect(allParams.get(ParameterId.PID_PROTOCOL_VERSION)).toEqual({ major: 2, minor: 1 });
     expect(allParams.get(ParameterId.PID_VENDORID)).toEqual(VendorId.EclipseCycloneDDS);
-    expect(allParams.get(ParameterId.PID_ENDPOINT_GUID)).toEqual({
-      guidPrefix: {
-        hostId: 0x54a61001,
-        appId: 0x319843ec,
-        instanceId: 0xa3669a35,
-      },
-      entityId: 0x000603,
-    });
+    expect(guidParts(allParams.get(ParameterId.PID_ENDPOINT_GUID) as Guid)).toEqual([
+      "54a61001319843eca3669a35",
+      0x000603,
+    ]);
     expect(allParams.get(ParameterId.PID_ADLINK_ENTITY_FACTORY)).toEqual(new Uint8Array([1, 0, 0, 0])); // prettier-ignore
     expect(allParams.get(0x8003)).toEqual(new Uint8Array([0, 0, 0, 0]));
     expect(allParams.get(ParameterId.PID_SENTINEL)).toEqual(undefined);

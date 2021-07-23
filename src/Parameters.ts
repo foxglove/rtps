@@ -1,7 +1,7 @@
 import { CdrWriter, EncapsulationKind } from "@foxglove/cdr";
 import { Duration } from "@foxglove/rostime";
 
-import { Guid } from "./Guid";
+import { Guid, writeGuidToCDR } from "./Guid";
 import { Locator } from "./Locator";
 import { BuiltinEndpointSet, ParameterId, VendorId } from "./enums";
 import { ProtocolVersion } from "./types";
@@ -52,7 +52,7 @@ export class Parameters {
   participantGuid(value: Guid): void {
     const length = 16;
     this.writePrefix(ParameterId.PID_PARTICIPANT_GUID, length);
-    value.toCDR(this.writer);
+    writeGuidToCDR(value, this.writer);
     this.writer.align(4);
   }
 
