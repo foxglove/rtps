@@ -1,4 +1,4 @@
-import { EntityId } from "../EntityId";
+import { EntityId, entityIdFromData, writeEntityId } from "../EntityId";
 import { SequenceNumberSet } from "../SequenceNumberSet";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
@@ -22,8 +22,8 @@ export class AckNack implements SubMessage {
     output.setUint8(offset, SubMessageId.ACKNACK);
     output.setUint8(offset + 1, flags); // flags
     output.setUint16(offset + 2, 12 + sequenceSetSize, littleEndian); // octetsToNextHeader
-    this.readerEntityId.write(output, offset + 4);
-    this.writerEntityId.write(output, offset + 8);
+    writeEntityId(this.readerEntityId, output, offset + 4);
+    writeEntityId(this.writerEntityId, output, offset + 8);
     this.readerSNState.write(output, offset + 12, littleEndian);
     output.setUint32(offset + 12 + sequenceSetSize, this.count, littleEndian);
     return 12 + sequenceSetSize + 4;
@@ -36,11 +36,11 @@ export class AckNackView extends SubMessageView {
   }
 
   get readerEntityId(): EntityId {
-    return EntityId.fromData(this.view, this.offset + 4);
+    return entityIdFromData(this.view, this.offset + 4);
   }
 
   get writerEntityId(): EntityId {
-    return EntityId.fromData(this.view, this.offset + 8);
+    return entityIdFromData(this.view, this.offset + 8);
   }
 
   get readerSNState(): SequenceNumberSet {

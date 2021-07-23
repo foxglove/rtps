@@ -2,7 +2,7 @@ import { CdrReader } from "@foxglove/cdr";
 import { Duration } from "@foxglove/rostime";
 
 import { DurabilityService } from "./DurabilityService";
-import { EntityId } from "./EntityId";
+import { entityIdFromCDR } from "./EntityId";
 import { Guid } from "./Guid";
 import { Locator } from "./Locator";
 import {
@@ -191,11 +191,11 @@ function getParameterValue(id: ParameterId, length: number, reader: CdrReader): 
     case ParameterId.PID_PARTICIPANT_GUID:
       return Guid.fromCDR(reader);
     case ParameterId.PID_PARTICIPANT_ENTITYID:
-      return EntityId.fromCDR(reader);
+      return entityIdFromCDR(reader);
     case ParameterId.PID_GROUP_GUID:
       return Guid.fromCDR(reader);
     case ParameterId.PID_GROUP_ENTITYID:
-      return EntityId.fromCDR(reader);
+      return entityIdFromCDR(reader);
     case ParameterId.PID_BUILTIN_ENDPOINT_SET:
       return reader.uint32();
     // case ParameterId.PID_PROPERTY_LIST:

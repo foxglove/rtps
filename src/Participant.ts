@@ -9,7 +9,12 @@ import {
   userUnicastPort,
 } from "./Discovery";
 import { Endpoint } from "./Endpoint";
-import { EntityId } from "./EntityId";
+import {
+  EntityId,
+  EntityIdBuiltinParticipantReader,
+  EntityIdBuiltinParticipantWriter,
+  EntityIdParticipant,
+} from "./EntityId";
 import { Guid } from "./Guid";
 import { GuidPrefix } from "./GuidPrefix";
 import { Locator } from "./Locator";
@@ -143,7 +148,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     parameters.protocolVersion({ major: 2, minor: 1 });
     parameters.vendorId(VendorId.EclipseCycloneDDS);
     parameters.participantLeaseDuration({ sec: 10, nsec: 0 });
-    parameters.participantGuid(new Guid(this.guidPrefix, EntityId.Participant));
+    parameters.participantGuid(new Guid(this.guidPrefix, EntityIdParticipant));
     parameters.builtinEndpointSet(builtinEndpoints);
     parameters.domainId(this.domainId);
     parameters.defaultUnicastLocator(this.defaultUnicastLocator);
@@ -154,8 +159,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const infoDst = new InfoDst(destGuidPrefix);
     const infoTs = new InfoTs(timestamp);
     const dataMsg = new DataMsg(
-      EntityId.BuiltinParticipantReader,
-      EntityId.BuiltinParticipantWriter,
+      EntityIdBuiltinParticipantReader,
+      EntityIdBuiltinParticipantWriter,
       1n,
       parameters.data,
       false,
@@ -324,11 +329,11 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         const topicEntityId = topicData.endpointGuid.entityId;
 
         // Create this topic if it doesn't exist yet
-        let endpoint = participant.endpoints.get(topicEntityId.value);
+        let endpoint = participant.endpoints.get(topicEntityId);
         if (endpoint == undefined) {
           this.log?.info?.(`Tracking topic "${topicData.topicName}" (${topicData.typeName})`);
           endpoint = new Topic({ participant, readerEntityId, writerEntityId, topicData }); // FIX!
-          participant.endpoints.set(topicEntityId.value, endpoint);
+          participant.endpoints.set(topicEntityId, endpoint);
           this.emit("discoveredTopic", topicData);
         } else {
           this.log?.info?.(
@@ -370,7 +375,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   private _getEndpoint(guidPrefix: GuidPrefix, entityId: EntityId): Endpoint | undefined {
-    return this.participants.get(guidPrefix.toString())?.endpoints.get(entityId.value);
+    return this.participants.get(guidPrefix.toString())?.endpoints.get(entityId);
   }
 
   private async _sendMetatrafficTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {

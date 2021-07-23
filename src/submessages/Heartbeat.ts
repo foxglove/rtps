@@ -1,4 +1,4 @@
-import { EntityId } from "../EntityId";
+import { EntityId, entityIdFromData, writeEntityId } from "../EntityId";
 import { SequenceNumber, sequenceNumberFromData, sequenceNumberToData } from "../SequenceNumber";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
@@ -25,8 +25,8 @@ export class Heartbeat implements SubMessage {
     output.setUint8(offset, SubMessageId.HEARTBEAT);
     output.setUint8(offset + 1, flags); // flags
     output.setUint16(offset + 2, 28, littleEndian); // octetsToNextHeader
-    this.readerEntityId.write(output, offset + 4);
-    this.writerEntityId.write(output, offset + 8);
+    writeEntityId(this.readerEntityId, output, offset + 4);
+    writeEntityId(this.writerEntityId, output, offset + 8);
     sequenceNumberToData(this.firstAvailableSeqNumber, output, offset + 12, littleEndian);
     sequenceNumberToData(this.lastSeqNumber, output, offset + 20, littleEndian);
     output.setUint32(offset + 28, this.count, littleEndian);
@@ -44,11 +44,11 @@ export class HeartbeatView extends SubMessageView {
   }
 
   get readerEntityId(): EntityId {
-    return EntityId.fromData(this.view, this.offset + 4);
+    return entityIdFromData(this.view, this.offset + 4);
   }
 
   get writerEntityId(): EntityId {
-    return EntityId.fromData(this.view, this.offset + 8);
+    return entityIdFromData(this.view, this.offset + 8);
   }
 
   get firstAvailableSeqNumber(): SequenceNumber {

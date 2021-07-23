@@ -3,57 +3,38 @@ import { CdrReader, CdrWriter } from "@foxglove/cdr";
 import { EntityKind } from "./enums";
 import { uint32ToHex } from "./toHex";
 
-export class EntityId {
-  static Participant = new EntityId(1, EntityKind.BuiltinParticipant);
-  static BuiltinPublicationsReader = new EntityId(0x0003, EntityKind.BuiltinReaderWithKey);
-  static BuiltinPublicationsWriter = new EntityId(0x0003, EntityKind.BuiltinWriterWithKey);
-  static BuiltinSubscriptionsReader = new EntityId(0x0004, EntityKind.BuiltinReaderWithKey);
-  static BuiltinSubscriptionsWriter = new EntityId(0x0004, EntityKind.BuiltinWriterWithKey);
-  static BuiltinParticipantReader = new EntityId(0x0100, EntityKind.BuiltinReaderWithKey);
-  static BuiltinParticipantWriter = new EntityId(0x0100, EntityKind.BuiltinWriterWithKey);
-  static BuiltinParticipantMessageReader = new EntityId(0x0200, EntityKind.BuiltinReaderWithKey);
-  static BuiltinParticipantMessageWriter = new EntityId(0x0200, EntityKind.BuiltinWriterWithKey);
+export type EntityId = number; // 32-bit unsigned integer
 
-  constructor(public key: number, public kind: EntityKind) {}
+export const EntityIdParticipant = 0x0001c1; // makeEntityId(0x0001, EntityKind.BuiltinParticipant);
+export const EntityIdBuiltinPublicationsReader = 0x0003c7; // makeEntityId(0x0003, EntityKind.BuiltinReaderWithKey); // prettier-ignore
+export const EntityIdBuiltinPublicationsWriter = 0x0003c2; // makeEntityId(0x0003, EntityKind.BuiltinWriterWithKey); // prettier-ignore
+export const EntityIdBuiltinSubscriptionsReader = 0x0004c7; // makeEntityId(0x0004, EntityKind.BuiltinReaderWithKey); // prettier-ignore
+export const EntityIdBuiltinSubscriptionsWriter = 0x0004c2; // makeEntityId(0x0004, EntityKind.BuiltinWriterWithKey); // prettier-ignore
+export const EntityIdBuiltinParticipantReader = 0x0100c7; // makeEntityId(0x0100, EntityKind.BuiltinReaderWithKey); // prettier-ignore
+export const EntityIdBuiltinParticipantWriter = 0x0100c2; // makeEntityId(0x0100, EntityKind.BuiltinWriterWithKey); // prettier-ignore
+export const EntityIdBuiltinParticipantMessageReader = 0x0200c7; // makeEntityId(0x0200, EntityKind.BuiltinReaderWithKey); // prettier-ignore
+export const EntityIdBuiltinParticipantMessageWriter = 0x0200c2; // makeEntityId(0x0200, EntityKind.BuiltinWriterWithKey); // prettier-ignore
 
-  get value(): number {
-    return (this.key << 8) | this.kind;
-  }
+export function makeEntityId(key: number, kind: EntityKind): EntityId {
+  return ((key << 8) | kind) >>> 0;
+}
 
-  equals(other: EntityId): boolean {
-    return this.key === other.key && this.kind === other.kind;
-  }
+export function entityIdFromData(view: DataView, offset: number): EntityId {
+  return view.getUint32(offset, false);
+}
 
-  write(output: DataView, offset: number): void {
-    output.setUint8(offset, (this.key & 0x00ff0000) >> 16);
-    output.setUint8(offset + 1, (this.key & 0x0000ff00) >> 8);
-    output.setUint8(offset + 2, this.key & 0x000000ff);
-    output.setUint8(offset + 3, this.kind);
-  }
+export function entityIdFromCDR(reader: CdrReader): EntityId {
+  return reader.uint32BE();
+}
 
-  toCDR(writer: CdrWriter): void {
-    writer.uint8((this.key & 0x00ff0000) >> 16);
-    writer.uint8((this.key & 0x0000ff00) >> 8);
-    writer.uint8(this.key & 0x000000ff);
-    writer.uint8(this.kind);
-  }
+export function writeEntityId(id: EntityId, output: DataView, offset: number): void {
+  output.setUint32(offset, id, false);
+}
 
-  toString(): string {
-    return uint32ToHex(this.value);
-  }
+export function writeEntityIdToCDR(id: EntityId, output: CdrWriter): void {
+  output.uint32BE(id);
+}
 
-  static fromData(view: DataView, offset: number): EntityId {
-    return new EntityId(view.getUint32(offset, false) >> 8, view.getUint8(offset + 3));
-  }
-
-  static fromCDR(reader: CdrReader): EntityId {
-    const a = reader.uint8();
-    const b = reader.uint8();
-    const c = reader.uint8();
-    return new EntityId((a << 16) | (b << 8) | c, reader.uint8());
-  }
-
-  static fromValue(value: number): EntityId {
-    return new EntityId(value >> 8, value & 0x000000ff);
-  }
+export function entityIdToString(id: EntityId): string {
+  return uint32ToHex(id);
 }

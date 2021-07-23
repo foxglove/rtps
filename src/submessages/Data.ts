@@ -1,7 +1,7 @@
 import { CdrReader } from "@foxglove/cdr";
 import { Time } from "@foxglove/rostime";
 
-import { EntityId } from "../EntityId";
+import { EntityId, entityIdFromData, writeEntityId } from "../EntityId";
 import { GuidPrefix } from "../GuidPrefix";
 import { ParametersView } from "../ParametersView";
 import { SequenceNumber, sequenceNumberFromData, sequenceNumberToData } from "../SequenceNumber";
@@ -37,8 +37,8 @@ export class DataMsg implements SubMessage {
     output.setUint16(offset + 2, 20 + payloadLength, littleEndian); // octetsToNextHeader
     output.setUint16(offset + 4, 0, false); // Extra flags
     output.setUint16(offset + 6, 16, littleEndian); // octetsToInlineQoS
-    this.readerEntityId.write(output, offset + 8);
-    this.writerEntityId.write(output, offset + 12);
+    writeEntityId(this.readerEntityId, output, offset + 8);
+    writeEntityId(this.writerEntityId, output, offset + 12);
     sequenceNumberToData(this.writerSeqNumber, output, offset + 16, littleEndian);
 
     new Uint8Array(output.buffer, payloadOffset, payloadLength).set(this.serializedData);
@@ -69,11 +69,11 @@ export class DataMsgView extends SubMessageView {
   }
 
   get readerEntityId(): EntityId {
-    return EntityId.fromData(this.view, this.offset + 8);
+    return entityIdFromData(this.view, this.offset + 8);
   }
 
   get writerEntityId(): EntityId {
-    return EntityId.fromData(this.view, this.offset + 12);
+    return entityIdFromData(this.view, this.offset + 12);
   }
 
   get writerSeqNumber(): SequenceNumber {

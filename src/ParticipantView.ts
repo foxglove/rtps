@@ -1,7 +1,14 @@
 import { Duration } from "@foxglove/rostime";
 
 import { Endpoint } from "./Endpoint";
-import { EntityId } from "./EntityId";
+import {
+  EntityIdBuiltinParticipantMessageReader,
+  EntityIdBuiltinParticipantMessageWriter,
+  EntityIdBuiltinPublicationsReader,
+  EntityIdBuiltinPublicationsWriter,
+  EntityIdBuiltinSubscriptionsReader,
+  EntityIdBuiltinSubscriptionsWriter,
+} from "./EntityId";
 import { GuidPrefix } from "./GuidPrefix";
 import { Locator } from "./Locator";
 import { Topic } from "./Topic";
@@ -39,31 +46,31 @@ export class ParticipantView {
     const endpointsAvailable = data.availableBuiltinEndpoints;
     if (hasBuiltinEndpoint(endpointsAvailable, BuiltinEndpointSet.PublicationAnnouncer)) {
       this.endpoints.set(
-        EntityId.BuiltinPublicationsWriter.value,
+        EntityIdBuiltinPublicationsWriter,
         new Endpoint({
           participant: this,
-          readerEntityId: EntityId.BuiltinPublicationsReader,
-          writerEntityId: EntityId.BuiltinPublicationsWriter,
+          readerEntityId: EntityIdBuiltinPublicationsReader,
+          writerEntityId: EntityIdBuiltinPublicationsWriter,
         }),
       );
     }
     if (hasBuiltinEndpoint(endpointsAvailable, BuiltinEndpointSet.SubscriptionAnnouncer)) {
       this.endpoints.set(
-        EntityId.BuiltinSubscriptionsWriter.value,
+        EntityIdBuiltinSubscriptionsWriter,
         new Endpoint({
           participant: this,
-          readerEntityId: EntityId.BuiltinSubscriptionsReader,
-          writerEntityId: EntityId.BuiltinSubscriptionsWriter,
+          readerEntityId: EntityIdBuiltinSubscriptionsReader,
+          writerEntityId: EntityIdBuiltinSubscriptionsWriter,
         }),
       );
     }
     if (hasBuiltinEndpoint(endpointsAvailable, BuiltinEndpointSet.ParticipantMessageDataWriter)) {
       this.endpoints.set(
-        EntityId.BuiltinParticipantMessageWriter.value,
+        EntityIdBuiltinParticipantMessageWriter,
         new Endpoint({
           participant: this,
-          readerEntityId: EntityId.BuiltinParticipantMessageReader,
-          writerEntityId: EntityId.BuiltinParticipantMessageWriter,
+          readerEntityId: EntityIdBuiltinParticipantMessageReader,
+          writerEntityId: EntityIdBuiltinParticipantMessageWriter,
         }),
       );
     }

@@ -1,3 +1,4 @@
+import { EntityIdBuiltinParticipantWriter, EntityIdParticipant } from "./EntityId";
 import { MessageView } from "./MessageView";
 import {
   VendorId,
@@ -7,7 +8,6 @@ import {
   EncapsulationKind,
   LocatorKind,
   Reliability,
-  EntityKind,
   SubMessageId,
   ParameterId,
 } from "./enums";
@@ -67,8 +67,8 @@ describe("MessageView", () => {
     expect(dataMsg.submessageId).toEqual(SubMessageId.DATA);
     expect(dataMsg.littleEndian).toEqual(true);
     expect(dataMsg.octetsToNextHeader).toEqual(248);
-    expect(dataMsg.readerEntityId).toEqual({ key: 0, kind: EntityKind.AppdefUnknown });
-    expect(dataMsg.writerEntityId).toEqual({ key: 0x0100, kind: EntityKind.BuiltinWriterWithKey });
+    expect(dataMsg.readerEntityId).toEqual(0);
+    expect(dataMsg.writerEntityId).toEqual(EntityIdBuiltinParticipantWriter);
     expect(dataMsg.writerSeqNumber).toEqual(1n);
     expect(dataMsg.encapsulationKind).toEqual(EncapsulationKind.PL_CDR_LE);
     expect(dataMsg.encapsulationOptions).toEqual(0);
@@ -94,7 +94,7 @@ describe("MessageView", () => {
     expect(allParams.get(ParameterId.PID_PARTICIPANT_LEASE_DURATION)).toEqual({ sec: 10, nsec: 0 });
     expect(allParams.get(ParameterId.PID_PARTICIPANT_GUID)).toEqual({
       guidPrefix: { hostId: 0x5ab81001, appId: 0x1636c7d5, instanceId: 0x1895c54e },
-      entityId: { key: 1, kind: EntityKind.BuiltinParticipant },
+      entityId: EntityIdParticipant,
     });
     const endpointSet = allParams.get(ParameterId.PID_BUILTIN_ENDPOINT_SET) as BuiltinEndpointSet;
     expect(hasBuiltinEndpoint(endpointSet, BuiltinEndpointSet.ParticipantAnnouncer)).toEqual(true);
@@ -182,10 +182,7 @@ describe("MessageView", () => {
         appId: 0x319843ec,
         instanceId: 0xa3669a35,
       },
-      entityId: {
-        key: 6,
-        kind: EntityKind.AppdefWriterNoKey,
-      },
+      entityId: 0x000603,
     });
     expect(allParams.get(ParameterId.PID_ADLINK_ENTITY_FACTORY)).toEqual(new Uint8Array([1, 0, 0, 0])); // prettier-ignore
     expect(allParams.get(0x8003)).toEqual(new Uint8Array([0, 0, 0, 0]));
