@@ -66,6 +66,10 @@ export enum BuiltinEndpointSet {
   ParticipantStateDetector = 1 << 9,
   ParticipantMessageDataWriter = 1 << 10,
   ParticipantMessageDataReader = 1 << 11,
+  TypeLookupRequestDataWriter = 1 << 12,
+  TypeLookupRequestDataReader = 1 << 13,
+  TypeLookupReplyDataWriter = 1 << 14,
+  TypeLookupReplyDataReader = 1 << 15,
 }
 
 export enum LocatorKind {
@@ -165,8 +169,8 @@ export enum ParameterId {
 
   PID_TYPE_OBJECT = 0x0072,
   PID_DATA_REPRESENTATION = 0x0073,
-  PID_TYPE_CONSISTENCY = 0x0074,
-  PID_EQUIVALENT_TYPE_NAME = 0x0075,
+  PID_TYPE_CONSISTENCY = 0x0074, // aka PID_XTYPES_TYPE_CONSISTENCY
+  PID_EQUIVALENT_TYPE_NAME = 0x0075, // aka PID_XTYPES_TYPE_INFORMATION
   PID_BASE_TYPE_NAME = 0x0076,
   PID_BUILTIN_ENDPOINT_QOS = 0x0077,
   PID_ENABLE_AUTHENTICATION = 0x0078,

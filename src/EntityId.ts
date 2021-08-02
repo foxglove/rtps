@@ -14,6 +14,10 @@ export const EntityIdBuiltinParticipantReader = 0x0100c7; // makeEntityId(0x0100
 export const EntityIdBuiltinParticipantWriter = 0x0100c2; // makeEntityId(0x0100, EntityKind.BuiltinWriterWithKey); // prettier-ignore
 export const EntityIdBuiltinParticipantMessageReader = 0x0200c7; // makeEntityId(0x0200, EntityKind.BuiltinReaderWithKey); // prettier-ignore
 export const EntityIdBuiltinParticipantMessageWriter = 0x0200c2; // makeEntityId(0x0200, EntityKind.BuiltinWriterWithKey); // prettier-ignore
+export const EntityIdBuiltinTypeLookupRequestReader = 0x0300c4; // makeEntityId(0x0300, EntityKind.BuiltinReaderNoKey); // prettier-ignore
+export const EntityIdBuiltinTypeLookupRequestWriter = 0x0300c3; // makeEntityId(0x0300, EntityKind.BuiltinWriterNoKey); // prettier-ignore
+export const EntityIdBuiltinTypeLookupReplyReader = 0x0301c4; // makeEntityId(0x0301, EntityKind.BuiltinReaderNoKey); // prettier-ignore
+export const EntityIdBuiltinTypeLookupReplyWriter = 0x0301c3; // makeEntityId(0x0301, EntityKind.BuiltinWriterNoKey); // prettier-ignore
 
 export function makeEntityId(key: number, kind: EntityKind): EntityId {
   return ((key << 8) | kind) >>> 0;
