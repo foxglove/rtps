@@ -41,3 +41,7 @@ export function guidParts(guid: Guid): [guidPrefix: GuidPrefix, entityId: Entity
   const entityId = entityIdFromString(guid.slice(24, 32));
   return [guidPrefix, entityId];
 }
+
+export function printGuid(obj: { guidPrefix: GuidPrefix; entityId: EntityId }): string {
+  return `${obj.guidPrefix}${entityIdToString(obj.entityId)}`;
+}

@@ -17,8 +17,8 @@ async function main() {
     participant.once("error", reject);
   });
 
-  participant.on("discoveredTopic", (topic) => {
-    console.dir(topic);
+  participant.on("discoveredEndpoint", (endpoint) => {
+    console.dir(endpoint);
   });
 
   console.dir(other);

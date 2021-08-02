@@ -1,6 +1,6 @@
 import { Duration, Time } from "@foxglove/rostime";
 
-import { Guid } from "./Guid";
+import { EntityId } from "./EntityId";
 import { GuidPrefix } from "./GuidPrefix";
 import { Locator } from "./Locator";
 import { SequenceNumber } from "./SequenceNumber";
@@ -19,6 +19,7 @@ export type HistoryAndDepth = {
 export type DiscoveredParticipantData = {
   timestamp?: Time;
   guidPrefix: GuidPrefix;
+  entityId: EntityId;
   protocolVersion: ProtocolVersion;
   vendorId: VendorId;
   expectsInlineQoS: boolean;
@@ -31,22 +32,23 @@ export type DiscoveredParticipantData = {
   userData?: string;
 };
 
-export type DiscoveredTopicData = {
+export type DiscoveredEndpointData = {
   timestamp?: Time;
   guidPrefix: GuidPrefix;
-  topicName: string;
-  typeName: string;
+  entityId: EntityId;
+  topicName?: string;
+  typeName?: string;
   reliability: Reliability;
   history: HistoryAndDepth;
   protocolVersion: ProtocolVersion;
   vendorId: VendorId;
-  endpointGuid: Guid;
   userData?: string;
 };
 
 export type UserData = {
   timestamp?: Time;
-  topic: DiscoveredTopicData;
+  publication: DiscoveredEndpointData;
+  subscription: DiscoveredEndpointData;
   writerSeqNumber: SequenceNumber;
   serializedData: Uint8Array;
 };

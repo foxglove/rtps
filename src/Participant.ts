@@ -5,26 +5,31 @@ import {
   discoveryMulticastPort,
   discoveryUnicastPort,
   MULTICAST_IPv4,
+  parseEndpoint,
+  parseParticipant,
   userMulticastPort,
   userUnicastPort,
 } from "./Discovery";
 import { Endpoint } from "./Endpoint";
 import {
   EntityId,
+  EntityIdBuiltinParticipantMessageWriter,
   EntityIdBuiltinParticipantReader,
   EntityIdBuiltinParticipantWriter,
+  EntityIdBuiltinPublicationsWriter,
+  EntityIdBuiltinSubscriptionsWriter,
+  EntityIdBuiltinTypeLookupReplyWriter,
+  EntityIdBuiltinTypeLookupRequestWriter,
   EntityIdParticipant,
 } from "./EntityId";
-import { guidParts, makeGuid } from "./Guid";
+import { makeGuid, printGuid } from "./Guid";
 import { generateGuidPrefix, GuidPrefix } from "./GuidPrefix";
 import { Locator } from "./Locator";
 import { LoggerService } from "./LoggerService";
 import { Message } from "./Message";
 import { MessageView } from "./MessageView";
 import { Parameters } from "./Parameters";
-import { ParametersView } from "./ParametersView";
 import { ParticipantView } from "./ParticipantView";
-import { Topic } from "./Topic";
 import { BuiltinEndpointSet, ChangeKind, SubMessageId, VendorId } from "./enums";
 import { UdpRemoteInfo, UdpSocket, UdpSocketCreate } from "./networkTypes";
 import {
@@ -36,12 +41,12 @@ import {
   InfoDst,
   InfoTs,
 } from "./submessages";
-import { DiscoveredParticipantData, UserData, DiscoveredTopicData } from "./types";
+import { DiscoveredParticipantData, UserData, DiscoveredEndpointData } from "./types";
 
 export interface ParticipantEvents {
   error: (error: Error) => void;
   discoveredParticipant: (participant: DiscoveredParticipantData) => void;
-  discoveredTopic: (topic: DiscoveredTopicData) => void;
+  discoveredEndpoint: (endpoint: DiscoveredEndpointData) => void;
   userData: (userData: UserData) => void;
 }
 
@@ -270,92 +275,115 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       this._recordChange(guidPrefix, dataMsg, endpoint);
     }
 
-    const params = dataMsg.parameters();
-    if (params != undefined) {
-      // meta message
-      this._handleMetaData(
-        guidPrefix,
-        dataMsg.readerEntityId,
-        dataMsg.writerEntityId,
-        params,
-        timestamp,
-      );
-    } else if (endpoint instanceof Topic) {
-      // user data
-      this.emit("userData", {
-        timestamp,
-        topic: endpoint.topicData,
-        writerSeqNumber: dataMsg.writerSeqNumber,
-        serializedData: dataMsg.serializedData,
-      });
-    } else if (endpoint != undefined) {
-      // TODO: Figure out what to do with this. BuiltinParticipantMessageWriter
-      const guid = makeGuid(guidPrefix, dataMsg.writerEntityId);
-      this.log?.info?.(`Received ${dataMsg.serializedData.length} byte DATA message for ${guid}`);
-    } else {
-      const guid = makeGuid(guidPrefix, dataMsg.writerEntityId);
-      this.log?.warn?.(`Received DATA message for unknown endpoint ${guid}`);
+    switch (dataMsg.writerEntityId) {
+      case EntityIdBuiltinPublicationsWriter:
+        this._handlePublicationOrSubscription(true, guidPrefix, dataMsg, timestamp);
+        break;
+      case EntityIdBuiltinSubscriptionsWriter:
+        this._handlePublicationOrSubscription(false, guidPrefix, dataMsg, timestamp);
+        break;
+      case EntityIdBuiltinParticipantWriter:
+        this._handleParticipant(guidPrefix, dataMsg, timestamp);
+        break;
+      case EntityIdBuiltinParticipantMessageWriter:
+        this._handleParticipantMessage(guidPrefix, dataMsg, timestamp);
+        break;
+      case EntityIdBuiltinTypeLookupRequestWriter:
+        this.log?.warn?.(`Received type lookup request from ${guidPrefix}`);
+        break;
+      case EntityIdBuiltinTypeLookupReplyWriter:
+        this.log?.warn?.(`Received type lookup reply from ${guidPrefix}`);
+        break;
+      default:
+        this.log?.warn?.(`Received data message from unhandled writer ${dataMsg.writerEntityId}`);
+        break;
     }
   };
 
-  private _handleMetaData = (
-    guidPrefix: GuidPrefix,
-    readerEntityId: EntityId,
-    writerEntityId: EntityId,
-    params: ParametersView,
-    timestamp?: Time | undefined,
+  private _handleParticipant = (
+    senderGuidPrefix: GuidPrefix,
+    dataMsg: DataMsgView,
+    timestamp: Time | undefined,
   ): void => {
-    // Check if the parameters describe a participant
-    const participantData = parseParticipant(params, guidPrefix);
-    if (participantData != undefined) {
-      const guidPrefixStr = guidPrefix.toString();
-      let participant = this.participants.get(guidPrefixStr);
-      if (participant == undefined) {
-        this.log?.info?.(`Tracking participant ${guidPrefixStr}`);
-        participant = new ParticipantView(participantData);
-        this.participants.set(guidPrefixStr, participant);
-        this.emit("discoveredParticipant", participantData);
-      } else {
-        this.log?.info?.(`Already tracking participant ${guidPrefixStr}`);
-      }
+    const params = dataMsg.parameters();
+    if (params == undefined) {
+      this.log?.warn?.(`Ignoring participant message with no parameters from ${senderGuidPrefix}`);
       return;
     }
 
-    // Check if the parameters describe a topic
-    const topicData = parseTopic(params, guidPrefix, timestamp);
-    if (topicData != undefined) {
-      const participant = this.participants.get(guidPrefix.toString());
-      if (participant != undefined) {
-        const [_, topicEntityId] = guidParts(topicData.endpointGuid);
-
-        // Create this topic if it doesn't exist yet
-        let endpoint = participant.endpoints.get(topicEntityId);
-        if (endpoint == undefined) {
-          this.log?.info?.(`Tracking topic "${topicData.topicName}" (${topicData.typeName})`);
-          endpoint = new Topic({ participant, readerEntityId, writerEntityId, topicData }); // FIX!
-          participant.endpoints.set(topicEntityId, endpoint);
-          this.emit("discoveredTopic", topicData);
-        } else {
-          this.log?.info?.(
-            `Already tracking topic "${topicData.topicName}" (${topicData.typeName})`,
-          );
-        }
-      } else {
-        this.log?.warn?.(
-          `Received message on topic "${topicData.topicName}" from unknown participant ${guidPrefix}`,
-        );
-        return;
-      }
-
+    const participantData = parseParticipant(params, timestamp);
+    if (participantData == undefined) {
+      this.log?.warn?.(`Failed to parse participant data from ${senderGuidPrefix}`);
       return;
     }
 
-    // Got a DATA ParameterList that doesn't describe a participant or a topic, log a warning
-    const count = params.allParameters().size;
-    this.log?.warn?.(
-      `Unparseable ParameterList from ${guidPrefix} with ${count} parameters:\n${params.allParameters()}`,
-    );
-    return;
+    let participant = this.participants.get(participantData.guidPrefix);
+    if (participant == undefined) {
+      this.log?.info?.(`Tracking participant ${participantData.guidPrefix}`);
+      participant = new ParticipantView(participantData);
+      this.participants.set(participantData.guidPrefix, participant);
+      this.emit("discoveredParticipant", participantData);
+    } else {
+      this.log?.info?.(`Updating participant ${participantData.guidPrefix}`);
+      participant.update(participantData);
+    }
+  };
+
+  private _handleParticipantMessage = (
+    _senderGuidPrefix: GuidPrefix,
+    _dataMsg: DataMsgView,
+    _timestamp: Time | undefined,
+  ): void => {
+    // TODO: Handle this when we have a concept of participant alive/stale states
+    this.log?.debug?.(`Received participant message from ${_dataMsg.writerEntityId}`);
+  };
+
+  private _handlePublicationOrSubscription = (
+    isPublication: boolean,
+    senderGuidPrefix: GuidPrefix,
+    dataMsg: DataMsgView,
+    timestamp: Time | undefined,
+  ): void => {
+    const params = dataMsg.parameters();
+    if (params == undefined) {
+      this.log?.warn?.(`Ignoring endpoint with no parameters from ${senderGuidPrefix}`);
+      return;
+    }
+
+    const endpointData = parseEndpoint(params, timestamp);
+    if (endpointData == undefined) {
+      this.log?.warn?.(`Failed to parse endpoint data from ${senderGuidPrefix}`);
+      return;
+    }
+
+    const participant = this.participants.get(endpointData.guidPrefix);
+    if (participant == undefined) {
+      this.log?.warn?.(`Received endpoint from unknown participant ${endpointData.guidPrefix}`);
+      return;
+    }
+
+    if (!participant.endpoints.has(endpointData.entityId)) {
+      this.log?.info?.(
+        `Tracking ${isPublication ? "publication" : "subscription"} ${endpointData.topicName} (${
+          endpointData.typeName
+        }) (${printGuid(endpointData)})`,
+      );
+
+      participant.endpoints.set(
+        endpointData.entityId,
+        new Endpoint({
+          participant,
+          readerEntityId: dataMsg.readerEntityId,
+          writerEntityId: dataMsg.writerEntityId,
+          data: endpointData,
+        }),
+      );
+      if (endpointData.topicName != undefined) {
+        participant.topicToEntityId.set(endpointData.topicName, endpointData.entityId);
+      }
+
+      this.emit("discoveredEndpoint", endpointData);
+    }
   };
 
   private _recordChange(guidPrefix: GuidPrefix, dataMsg: DataMsgView, endpoint: Endpoint) {
@@ -375,11 +403,11 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   private _getEndpoint(guidPrefix: GuidPrefix, entityId: EntityId): Endpoint | undefined {
-    return this.participants.get(guidPrefix.toString())?.endpoints.get(entityId);
+    return this.participants.get(guidPrefix)?.endpoints.get(entityId);
   }
 
   private async _sendMetatrafficTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
-    const participant = this.participants.get(destGuidPrefix.toString());
+    const participant = this.participants.get(destGuidPrefix);
     if (participant == undefined) {
       this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);
       return;
@@ -398,7 +426,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   // private async _sendDefaultTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
-  //   const participant = this.participants.get(destGuidPrefix.toString());
+  //   const participant = this.participants.get(destGuidPrefix);
   //   if (participant == undefined) {
   //     this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);
   //     return;
@@ -448,96 +476,6 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     );
     return socket;
   }
-}
-
-function parseParticipant(
-  params: ParametersView,
-  guidPrefix: GuidPrefix,
-  timestamp?: Time,
-): DiscoveredParticipantData | undefined {
-  const protocolVersion = params.protocolVersion();
-  const vendorId = params.vendorId();
-  const expectsInlineQoS = params.expectsInlineQoS();
-  const metatrafficUnicastLocator = params.metatrafficUnicastLocator();
-  const metatrafficMulticastLocator = params.metatrafficMulticastLocator();
-  const defaultUnicastLocator = params.defaultUnicastLocator();
-  const defaultMulticastLocator = params.defaultMulticastLocator();
-  const availableBuiltinEndpoints = params.builtinEndpointSet();
-  const leaseDuration = params.participantLeaseDuration();
-  const userData = params.userDataString();
-
-  if (
-    protocolVersion == undefined ||
-    vendorId == undefined ||
-    availableBuiltinEndpoints == undefined ||
-    leaseDuration == undefined
-  ) {
-    return undefined;
-  }
-
-  const metatrafficUnicastLocatorList =
-    metatrafficUnicastLocator != undefined ? [metatrafficUnicastLocator] : [];
-  const metatrafficMulticastLocatorList =
-    metatrafficMulticastLocator != undefined ? [metatrafficMulticastLocator] : [];
-  const defaultUnicastLocatorList =
-    defaultUnicastLocator != undefined ? [defaultUnicastLocator] : [];
-  const defaultMulticastLocatorList =
-    defaultMulticastLocator != undefined ? [defaultMulticastLocator] : [];
-
-  return {
-    timestamp,
-    guidPrefix,
-    protocolVersion,
-    vendorId,
-    expectsInlineQoS,
-    metatrafficUnicastLocatorList,
-    metatrafficMulticastLocatorList,
-    defaultUnicastLocatorList,
-    defaultMulticastLocatorList,
-    availableBuiltinEndpoints,
-    leaseDuration,
-    userData,
-  };
-}
-
-function parseTopic(
-  params: ParametersView,
-  guidPrefix: GuidPrefix,
-  timestamp?: Time,
-): DiscoveredTopicData | undefined {
-  const topicName = params.topicName();
-  const typeName = params.typeName();
-  const reliability = params.reliability();
-  const history = params.history();
-  const protocolVersion = params.protocolVersion();
-  const vendorId = params.vendorId();
-  const endpointGuid = params.endpointGuid();
-  const userData = params.userDataString();
-
-  if (
-    topicName == undefined ||
-    typeName == undefined ||
-    reliability == undefined ||
-    history == undefined ||
-    protocolVersion == undefined ||
-    vendorId == undefined ||
-    endpointGuid == undefined
-  ) {
-    return undefined;
-  }
-
-  return {
-    timestamp,
-    guidPrefix,
-    topicName,
-    typeName,
-    reliability,
-    history,
-    protocolVersion,
-    vendorId,
-    endpointGuid,
-    userData,
-  };
 }
 
 async function locatorForSocket(socket: UdpSocket): Promise<Locator | undefined> {

@@ -22,5 +22,4 @@ export * from "./SequenceNumber";
 export * from "./SequenceNumberSet";
 export * from "./SubMessage";
 export * from "./toHex";
-export * from "./Topic";
 export * from "./types";
