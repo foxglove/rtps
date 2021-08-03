@@ -22,7 +22,7 @@ import {
   EntityIdBuiltinTypeLookupRequestWriter,
   EntityIdParticipant,
 } from "./EntityId";
-import { makeGuid, printGuid } from "./Guid";
+import { makeGuid } from "./Guid";
 import { generateGuidPrefix, GuidPrefix } from "./GuidPrefix";
 import { Locator } from "./Locator";
 import { LoggerService } from "./LoggerService";
@@ -231,7 +231,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const entityId = heartbeat.writerEntityId;
     const endpoint = this._getEndpoint(guidPrefix, heartbeat.writerEntityId);
     if (endpoint == undefined) {
-      this.log?.warn?.(`Received heartbeat for unknown guid ${guidPrefix}${entityId}`);
+      this.log?.warn?.(`Received heartbeat for unknown endpoint ${makeGuid(guidPrefix, entityId)}`);
       return;
     }
 
@@ -258,6 +258,10 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const msg = new Message({ guidPrefix: this.guidPrefix });
     msg.writeSubmessage(infoDst);
     msg.writeSubmessage(ackNack);
+
+    this.log?.debug?.(
+      `Responding to heartbeat for ${makeGuid(guidPrefix, entityId)} (${endpoint.data.topicName})`,
+    );
 
     void this._sendMetatrafficTo(msg, guidPrefix);
   };
@@ -352,7 +356,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     const endpointData = parseEndpoint(params, timestamp);
     if (endpointData == undefined) {
-      this.log?.warn?.(`Failed to parse endpoint data from ${senderGuidPrefix}`);
+      this.log?.warn?.(
+        `Failed to parse endpoint data from ${senderGuidPrefix}:\n${params.allParameters()}`,
+      );
       return;
     }
 
@@ -366,7 +372,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       this.log?.info?.(
         `Tracking ${isPublication ? "publication" : "subscription"} ${endpointData.topicName} (${
           endpointData.typeName
-        }) (${printGuid(endpointData)})`,
+        }) (${makeGuid(endpointData.guidPrefix, endpointData.entityId)}). readerEntityId=${
+          dataMsg.readerEntityId
+        }, writerEntityId=${dataMsg.writerEntityId}`,
       );
 
       participant.endpoints.set(
