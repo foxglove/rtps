@@ -1,10 +1,10 @@
 import {
   Participant,
   selectIPv4,
-  DiscoveredParticipantData,
   Durability,
   Reliability,
   HistoryKind,
+  ParticipantAttributes,
 } from "../src";
 import { getNetworkInterfaces, UdpSocketNode } from "../src/nodejs";
 
@@ -29,7 +29,7 @@ async function main() {
     console.dir(endpoint);
   });
 
-  const other = await new Promise<DiscoveredParticipantData>((resolve, reject) => {
+  const other = await new Promise<ParticipantAttributes>((resolve, reject) => {
     participant.once("discoveredParticipant", resolve);
     participant.once("error", reject);
   });
