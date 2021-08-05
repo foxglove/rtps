@@ -1,6 +1,6 @@
 import { Participant } from "./Participant";
 import { getNetworkInterfaces, UdpSocketNode } from "./nodejs";
-import { selectIPv4 } from "./selectIP";
+import { selectIPv4 } from "./transport";
 
 jest.setTimeout(1000 * 10);
 

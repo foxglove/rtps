@@ -1,20 +1,20 @@
 import { Duration, fromMillis } from "@foxglove/rostime";
 
 import { Endpoint } from "./Endpoint";
+import { DiscoveredParticipantData } from "./ParticipantAttributes";
 import {
   EntityId,
-  EntityIdBuiltinParticipantMessageReader,
-  EntityIdBuiltinParticipantMessageWriter,
-  EntityIdBuiltinPublicationsReader,
-  EntityIdBuiltinPublicationsWriter,
-  EntityIdBuiltinSubscriptionsReader,
-  EntityIdBuiltinSubscriptionsWriter,
-} from "./EntityId";
-import { GuidPrefix } from "./GuidPrefix";
-import { Locator } from "./Locator";
-import { BuiltinEndpointSet, History, Reliability, VendorId } from "./enums";
-import { hasBuiltinEndpoint } from "./hasBuiltinEndpoint";
-import { ProtocolVersion, DiscoveredParticipantData, DiscoveredEndpointData } from "./types";
+  EntityIdBuiltin,
+  GuidPrefix,
+  Locator,
+  BuiltinEndpointSet,
+  HistoryKind,
+  Reliability,
+  VendorId,
+  hasBuiltinEndpoint,
+  ProtocolVersion,
+  DiscoveredEndpointData,
+} from "./common";
 
 export class ParticipantView {
   guidPrefix: GuidPrefix;
@@ -48,20 +48,20 @@ export class ParticipantView {
     this.maybeAddBuiltin(
       endpointsAvailable,
       BuiltinEndpointSet.PublicationAnnouncer,
-      EntityIdBuiltinPublicationsReader,
-      EntityIdBuiltinPublicationsWriter,
+      EntityIdBuiltin.PublicationsReader,
+      EntityIdBuiltin.PublicationsWriter,
     );
     this.maybeAddBuiltin(
       endpointsAvailable,
       BuiltinEndpointSet.SubscriptionAnnouncer,
-      EntityIdBuiltinSubscriptionsReader,
-      EntityIdBuiltinSubscriptionsWriter,
+      EntityIdBuiltin.SubscriptionsReader,
+      EntityIdBuiltin.SubscriptionsWriter,
     );
     this.maybeAddBuiltin(
       endpointsAvailable,
       BuiltinEndpointSet.ParticipantMessageDataWriter,
-      EntityIdBuiltinParticipantMessageReader,
-      EntityIdBuiltinParticipantMessageWriter,
+      EntityIdBuiltin.ParticipantMessageReader,
+      EntityIdBuiltin.ParticipantMessageWriter,
     );
   }
 
@@ -98,7 +98,7 @@ export class ParticipantView {
         guidPrefix: this.guidPrefix,
         entityId: writerEntityId,
         reliability: { kind: Reliability.Reliable, maxBlockingTime: fromMillis(100) },
-        history: { kind: History.KeepLast, depth: 0 },
+        history: { kind: HistoryKind.KeepLast, depth: 0 },
         protocolVersion: this.protocolVersion,
         vendorId: this.vendorId,
       };

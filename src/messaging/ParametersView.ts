@@ -1,12 +1,21 @@
 import { CdrReader } from "@foxglove/cdr";
 import { Duration, Time } from "@foxglove/rostime";
 
-import { DurabilityService } from "./DurabilityService";
-import { entityIdFromCDR } from "./EntityId";
-import { Guid, guidFromCDR } from "./Guid";
-import { Locator } from "./Locator";
-import { BuiltinEndpointSet, Durability, History, ParameterId, VendorId } from "./enums";
-import { HistoryAndDepth, ProtocolVersion, ReliabilityAndMaxBlockingTime } from "./types";
+import {
+  DurabilityService,
+  entityIdFromCDR,
+  Guid,
+  guidFromCDR,
+  Locator,
+  BuiltinEndpointSet,
+  Durability,
+  HistoryKind,
+  ParameterId,
+  VendorId,
+  HistoryAndDepth,
+  ProtocolVersion,
+  ReliabilityAndMaxBlockingTime,
+} from "../common";
 
 const textDecoder = new TextDecoder();
 
@@ -143,7 +152,7 @@ function getParameterValue(id: ParameterId, length: number, reader: CdrReader): 
       return readTime(reader);
     // case ParameterId.PID_DESTINATION_ORDER:
     case ParameterId.PID_HISTORY:
-      return { kind: reader.uint32() as History, depth: reader.int32() };
+      return { kind: reader.uint32() as HistoryKind, depth: reader.int32() };
     // case ParameterId.PID_RESOURCE_LIMITS:
     // case ParameterId.PID_OWNERSHIP:
     // case ParameterId.PID_OWNERSHIP_STRENGTH:

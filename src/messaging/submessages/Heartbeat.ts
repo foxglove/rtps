@@ -1,8 +1,15 @@
-import { EntityId, entityIdFromData, writeEntityId } from "../EntityId";
-import { SequenceNumber, sequenceNumberFromData, sequenceNumberToData } from "../SequenceNumber";
+import {
+  EntityId,
+  entityIdFromData,
+  writeEntityId,
+  SequenceNumber,
+  sequenceNumberFromData,
+  sequenceNumberToData,
+  LittleEndian,
+  SubMessageId,
+} from "../../common";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
-import { LittleEndian, SubMessageId } from "../enums";
 import { Final } from "./AckNack";
 
 export const Liveliness = 1 << 2;

@@ -4,6 +4,11 @@ for (let n = 0; n < 0x100; n++) {
   LUT_HEX_8b[n] = `${LUT_HEX_4b[(n >>> 4) & 0xf]!}${LUT_HEX_4b[n & 0xf]!}`;
 }
 
+export function fromHex(hex: string): Uint8Array {
+  const match = hex.match(/.{1,2}/g) ?? [];
+  return new Uint8Array(match.map((byte) => parseInt(byte, 16)));
+}
+
 export function toHex(buffer: Uint8Array): string {
   let out = "";
   for (let idx = 0, edx = buffer.length; idx < edx; idx++) {

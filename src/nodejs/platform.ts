@@ -1,6 +1,6 @@
 import os from "os";
 
-import { NetworkInterface } from "../networkTypes";
+import { NetworkInterface } from "../transport";
 
 export function getNetworkInterfaces(): NetworkInterface[] {
   const output: NetworkInterface[] = [];

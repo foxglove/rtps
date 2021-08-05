@@ -23,7 +23,7 @@ export enum Reliability {
   Reliable = 2,
 }
 
-export enum History {
+export enum HistoryKind {
   KeepLast = 0,
   KeepAll = 1,
 }

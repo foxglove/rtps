@@ -4,7 +4,7 @@ import {
   DiscoveredParticipantData,
   Durability,
   Reliability,
-  History,
+  HistoryKind,
 } from "../src";
 import { getNetworkInterfaces, UdpSocketNode } from "../src/nodejs";
 
@@ -50,7 +50,7 @@ async function main() {
     typeName: "std_msgs::msg::dds_::String_",
     durability: Durability.TransientLocal,
     reliability: { kind: Reliability.Reliable, maxBlockingTime: DURATION_INFINITE },
-    history: { kind: History.KeepLast, depth: 10 },
+    history: { kind: HistoryKind.KeepLast, depth: 10 },
   });
 
   await participant.sendAlive();

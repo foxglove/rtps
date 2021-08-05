@@ -1,13 +1,21 @@
 import { CdrReader } from "@foxglove/cdr";
 import { Time } from "@foxglove/rostime";
 
-import { EntityId, entityIdFromData, writeEntityId } from "../EntityId";
-import { GuidPrefix } from "../GuidPrefix";
+import {
+  EntityId,
+  entityIdFromData,
+  writeEntityId,
+  GuidPrefix,
+  EncapsulationKind,
+  LittleEndian,
+  SubMessageId,
+  SequenceNumber,
+  sequenceNumberFromData,
+  sequenceNumberToData,
+} from "../../common";
 import { ParametersView } from "../ParametersView";
-import { SequenceNumber, sequenceNumberFromData, sequenceNumberToData } from "../SequenceNumber";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
-import { EncapsulationKind, LittleEndian, SubMessageId } from "../enums";
 
 export const InlineQoS = 1 << 1;
 export const DataPresent = 1 << 2;

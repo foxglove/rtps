@@ -1,6 +1,6 @@
 import { CdrReader, CdrWriter } from "@foxglove/cdr";
 
-import { uint32ToHex } from "./toHex";
+import { uint32ToHex } from "./hex";
 
 export type GuidPrefix = string; // 24 hex characters
 

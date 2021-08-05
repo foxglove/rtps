@@ -1,18 +1,19 @@
-import { EntityIdBuiltinParticipantWriter, EntityIdParticipant } from "./EntityId";
-import { Guid, guidParts } from "./Guid";
-import { MessageView } from "./MessageView";
 import {
+  EntityIdBuiltin,
+  Guid,
+  guidParts,
+  hasBuiltinEndpoint,
   VendorId,
   BuiltinEndpointSet,
   Durability,
-  History,
+  HistoryKind,
   EncapsulationKind,
   LocatorKind,
   Reliability,
   SubMessageId,
   ParameterId,
-} from "./enums";
-import { hasBuiltinEndpoint } from "./hasBuiltinEndpoint";
+} from "../common";
+import { MessageView } from "./MessageView";
 import { DataMsgView, InfoTsView } from "./submessages";
 
 describe("MessageView", () => {
@@ -65,7 +66,7 @@ describe("MessageView", () => {
     expect(dataMsg.littleEndian).toEqual(true);
     expect(dataMsg.octetsToNextHeader).toEqual(248);
     expect(dataMsg.readerEntityId).toEqual(0);
-    expect(dataMsg.writerEntityId).toEqual(EntityIdBuiltinParticipantWriter);
+    expect(dataMsg.writerEntityId).toEqual(EntityIdBuiltin.ParticipantWriter);
     expect(dataMsg.writerSeqNumber).toEqual(1n);
     expect(dataMsg.encapsulationKind).toEqual(EncapsulationKind.PL_CDR_LE);
     expect(dataMsg.encapsulationOptions).toEqual(0);
@@ -91,7 +92,7 @@ describe("MessageView", () => {
     expect(allParams.get(ParameterId.PID_PARTICIPANT_LEASE_DURATION)).toEqual({ sec: 10, nsec: 0 });
     expect(guidParts(allParams.get(ParameterId.PID_PARTICIPANT_GUID) as Guid)).toEqual([
       "5ab810011636c7d51895c54e",
-      EntityIdParticipant,
+      EntityIdBuiltin.Participant,
     ]);
     const endpointSet = allParams.get(ParameterId.PID_BUILTIN_ENDPOINT_SET) as BuiltinEndpointSet;
     expect(hasBuiltinEndpoint(endpointSet, BuiltinEndpointSet.ParticipantAnnouncer)).toEqual(true);
@@ -158,15 +159,21 @@ describe("MessageView", () => {
     expect(allParams.get(ParameterId.PID_DURABILITY)).toEqual(Durability.TransientLocal);
     expect(allParams.get(ParameterId.PID_DURABILITY_SERVICE)).toEqual({
       leaseDuration: { sec: 0, nsec: 0 },
-      historyKind: History.KeepLast,
+      historyKind: HistoryKind.KeepLast,
       historyDepth: 1000,
       maxSamples: -1,
       maxInstances: -1,
       maxSamplesPerInstance: -1,
     });
-    expect(allParams.get(ParameterId.PID_RELIABILITY)).toEqual(Reliability.Reliable);
+    expect(allParams.get(ParameterId.PID_RELIABILITY)).toEqual({
+      kind: Reliability.Reliable,
+      maxBlockingTime: { nsec: 4294967295, sec: 2147483647 },
+    });
     expect(allParams.get(ParameterId.PID_LIFESPAN)).toEqual({ sec: 10, nsec: 0 });
-    expect(allParams.get(ParameterId.PID_HISTORY)).toEqual({ kind: History.KeepLast, depth: 1000 });
+    expect(allParams.get(ParameterId.PID_HISTORY)).toEqual({
+      kind: HistoryKind.KeepLast,
+      depth: 1000,
+    });
     expect(allParams.get(ParameterId.PID_PROTOCOL_VERSION)).toEqual({ major: 2, minor: 1 });
     expect(allParams.get(ParameterId.PID_VENDORID)).toEqual(VendorId.EclipseCycloneDDS);
     expect(guidParts(allParams.get(ParameterId.PID_ENDPOINT_GUID) as Guid)).toEqual([

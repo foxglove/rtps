@@ -1,7 +1,12 @@
-import { GuidPrefix, guidPrefixFromData, writeGuidPrefix } from "../GuidPrefix";
+import {
+  GuidPrefix,
+  guidPrefixFromData,
+  writeGuidPrefix,
+  LittleEndian,
+  SubMessageId,
+} from "../../common";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
-import { LittleEndian, SubMessageId } from "../enums";
 
 export class InfoDst implements SubMessage {
   constructor(public guidPrefix: GuidPrefix) {}

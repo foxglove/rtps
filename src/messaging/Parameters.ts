@@ -1,10 +1,18 @@
 import { CdrWriter, EncapsulationKind } from "@foxglove/cdr";
 import { Duration } from "@foxglove/rostime";
 
-import { Guid, writeGuidToCDR } from "./Guid";
-import { Locator } from "./Locator";
-import { BuiltinEndpointSet, Durability, ParameterId, VendorId } from "./enums";
-import { HistoryAndDepth, ProtocolVersion, ReliabilityAndMaxBlockingTime } from "./types";
+import {
+  Guid,
+  writeGuidToCDR,
+  Locator,
+  BuiltinEndpointSet,
+  Durability,
+  ParameterId,
+  VendorId,
+  HistoryAndDepth,
+  ProtocolVersion,
+  ReliabilityAndMaxBlockingTime,
+} from "../common";
 
 const textEncoder = new TextEncoder();
 

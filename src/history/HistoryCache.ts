@@ -1,6 +1,4 @@
-import { CacheChange } from "./CacheChange";
-import { SequenceNumber } from "./SequenceNumber";
-import { SequenceNumberSet } from "./SequenceNumberSet";
+import { CacheChange, SequenceNumber, SequenceNumberSet } from "../common";
 
 export class HistoryCache {
   // TODO: remove() could be sped up by using a sorted data structure

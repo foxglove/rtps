@@ -1,7 +1,6 @@
 import { Time } from "@foxglove/rostime";
 
-import { GuidPrefix } from "./GuidPrefix";
-import { LittleEndian, SubMessageId } from "./enums";
+import { GuidPrefix, LittleEndian, SubMessageId } from "../common";
 
 export class SubMessageView {
   readonly data: Readonly<Uint8Array>;

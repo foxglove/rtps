@@ -1,8 +1,13 @@
-import { EntityId, entityIdFromData, writeEntityId } from "../EntityId";
-import { SequenceNumberSet } from "../SequenceNumberSet";
+import {
+  EntityId,
+  entityIdFromData,
+  writeEntityId,
+  SequenceNumberSet,
+  LittleEndian,
+  SubMessageId,
+} from "../../common";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
-import { LittleEndian, SubMessageId } from "../enums";
 
 export const Final = 1 << 1;
 

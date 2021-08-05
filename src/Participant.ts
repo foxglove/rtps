@@ -2,47 +2,33 @@ import { CdrWriter } from "@foxglove/cdr";
 import { fromDate, Time } from "@foxglove/rostime";
 import { EventEmitter } from "eventemitter3";
 
-import {
-  discoveryMulticastPort,
-  discoveryUnicastPort,
-  MULTICAST_IPv4,
-  parseEndpoint,
-  parseParticipant,
-  userMulticastPort,
-  userUnicastPort,
-} from "./Discovery";
 import { Endpoint } from "./Endpoint";
-import {
-  EntityId,
-  EntityIdBuiltinParticipantMessageReader,
-  EntityIdBuiltinParticipantMessageWriter,
-  EntityIdBuiltinParticipantReader,
-  EntityIdBuiltinParticipantWriter,
-  EntityIdBuiltinPublicationsWriter,
-  EntityIdBuiltinSubscriptionsWriter,
-  EntityIdBuiltinTypeLookupReplyWriter,
-  EntityIdBuiltinTypeLookupRequestWriter,
-  EntityIdParticipant,
-  EntityIdUnknown,
-  makeEntityId,
-} from "./EntityId";
-import { makeGuid } from "./Guid";
-import { generateGuidPrefix, GuidPrefix, writeGuidPrefixToCDR } from "./GuidPrefix";
-import { Locator } from "./Locator";
-import { LoggerService } from "./LoggerService";
-import { Message } from "./Message";
-import { MessageView } from "./MessageView";
-import { Parameters } from "./Parameters";
+import { DiscoveredParticipantData } from "./ParticipantAttributes";
 import { ParticipantView } from "./ParticipantView";
 import {
+  EntityId,
+  EntityIdBuiltin,
+  makeEntityId,
+  makeGuid,
+  generateGuidPrefix,
+  GuidPrefix,
+  writeGuidPrefixToCDR,
+  Locator,
+  LoggerService,
   BuiltinEndpointSet,
   ChangeKind,
   Durability,
   EntityKind,
   SubMessageId,
   VendorId,
-} from "./enums";
-import { UdpRemoteInfo, UdpSocket, UdpSocketCreate } from "./networkTypes";
+  UserData,
+  DiscoveredEndpointData,
+  HistoryAndDepth,
+  ProtocolVersion,
+  ReliabilityAndMaxBlockingTime,
+} from "./common";
+import { parseEndpoint, parseParticipant } from "./discovery";
+import { Message, MessageView, Parameters } from "./messaging";
 import {
   AckNack,
   AckNackView,
@@ -52,15 +38,16 @@ import {
   HeartbeatView,
   InfoDst,
   InfoTs,
-} from "./submessages";
+} from "./messaging/submessages";
 import {
-  DiscoveredParticipantData,
-  UserData,
-  DiscoveredEndpointData,
-  HistoryAndDepth,
-  ProtocolVersion,
-  ReliabilityAndMaxBlockingTime,
-} from "./types";
+  MULTICAST_IPv4,
+  UdpRemoteInfo,
+  UdpSocket,
+  UdpSocketCreate,
+  locatorFromUdpAddress,
+  discoveryMulticastPort,
+  userMulticastPort,
+} from "./transport";
 
 export interface ParticipantEvents {
   error: (error: Error) => void;
@@ -140,7 +127,6 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const address = this.addresses[0]!;
 
     this.metatrafficUnicastSocket = await this._createUdpSocket(
-      discoveryUnicastPort(this.domainId, this.participantId),
       address,
       this._handleMetatrafficMessage,
     );
@@ -150,11 +136,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       address,
       this._handleMetatrafficMessage,
     );
-    this.defaultUnicastSocket = await this._createUdpSocket(
-      userUnicastPort(this.domainId, this.participantId),
-      address,
-      this._handleDefaultMessage,
-    );
+    this.defaultUnicastSocket = await this._createUdpSocket(address, this._handleDefaultMessage);
     this.defaultUnicastLocator = await locatorForSocket(this.defaultUnicastSocket);
     this.defaultMulticastSocket = await this._createMulticastUdpSocket(
       userMulticastPort(this.domainId),
@@ -186,8 +168,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     // Submessages
     const infoTs = new InfoTs(fromDate(new Date()));
     const dataMsg = new DataMsg(
-      EntityIdBuiltinParticipantMessageReader,
-      EntityIdBuiltinParticipantMessageWriter,
+      EntityIdBuiltin.ParticipantMessageReader,
+      EntityIdBuiltin.ParticipantMessageWriter,
       1n, // FIXME
       cdr.data,
       false,
@@ -195,8 +177,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       false,
     );
     const heartbeat = new Heartbeat(
-      EntityIdBuiltinParticipantMessageReader,
-      EntityIdBuiltinParticipantMessageWriter,
+      EntityIdBuiltin.ParticipantMessageReader,
+      EntityIdBuiltin.ParticipantMessageWriter,
       1n, // FIXME
       1n,
       ++this.heartbeatCount,
@@ -233,8 +215,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     // Submessages
     const infoDst = new InfoDst(participant.guidPrefix);
     const heartbeat1 = new Heartbeat(
-      EntityIdUnknown,
-      EntityIdBuiltinSubscriptionsWriter,
+      EntityIdBuiltin.Unknown,
+      EntityIdBuiltin.SubscriptionsWriter,
       1n,
       1n,
       ++this.heartbeatCount,
@@ -242,8 +224,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       false,
     );
     const heartbeat2 = new Heartbeat(
-      EntityIdUnknown,
-      EntityIdBuiltinParticipantMessageWriter,
+      EntityIdBuiltin.Unknown,
+      EntityIdBuiltin.ParticipantMessageWriter,
       1n,
       0n,
       ++this.heartbeatCount,
@@ -296,8 +278,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     // const infoDst = new InfoDst(participant.guidPrefix);
     const infoTs = new InfoTs(timestamp);
     const dataMsg = new DataMsg(
-      EntityIdUnknown,
-      EntityIdBuiltinSubscriptionsWriter,
+      EntityIdBuiltin.Unknown,
+      EntityIdBuiltin.SubscriptionsWriter,
       1n, // FIXME
       parameters.data,
       false,
@@ -340,7 +322,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     parameters.protocolVersion({ major: 2, minor: 1 });
     parameters.vendorId(VendorId.EclipseCycloneDDS);
     parameters.participantLeaseDuration({ sec: 10, nsec: 0 });
-    parameters.participantGuid(makeGuid(this.guidPrefix, EntityIdParticipant));
+    parameters.participantGuid(makeGuid(this.guidPrefix, EntityIdBuiltin.Participant));
     parameters.builtinEndpointSet(builtinEndpoints);
     parameters.domainId(this.domainId);
     parameters.defaultUnicastLocator(this.defaultUnicastLocator);
@@ -351,8 +333,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const infoDst = new InfoDst(destGuidPrefix);
     const infoTs = new InfoTs(timestamp);
     const dataMsg = new DataMsg(
-      EntityIdBuiltinParticipantReader,
-      EntityIdBuiltinParticipantWriter,
+      EntityIdBuiltin.ParticipantReader,
+      EntityIdBuiltin.ParticipantWriter,
       1n, // FIXME
       parameters.data,
       false,
@@ -469,22 +451,22 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     }
 
     switch (dataMsg.writerEntityId) {
-      case EntityIdBuiltinPublicationsWriter:
+      case EntityIdBuiltin.PublicationsWriter:
         this._handlePublicationOrSubscription(true, guidPrefix, dataMsg, timestamp);
         break;
-      case EntityIdBuiltinSubscriptionsWriter:
+      case EntityIdBuiltin.SubscriptionsWriter:
         this._handlePublicationOrSubscription(false, guidPrefix, dataMsg, timestamp);
         break;
-      case EntityIdBuiltinParticipantWriter:
+      case EntityIdBuiltin.ParticipantWriter:
         this._handleParticipant(guidPrefix, dataMsg, timestamp);
         break;
-      case EntityIdBuiltinParticipantMessageWriter:
+      case EntityIdBuiltin.ParticipantMessageWriter:
         this._handleParticipantMessage(guidPrefix, dataMsg, timestamp);
         break;
-      case EntityIdBuiltinTypeLookupRequestWriter:
+      case EntityIdBuiltin.TypeLookupRequestWriter:
         this.log?.warn?.(`Received type lookup request from ${guidPrefix}`);
         break;
-      case EntityIdBuiltinTypeLookupReplyWriter:
+      case EntityIdBuiltin.TypeLookupReplyWriter:
         this.log?.warn?.(`Received type lookup reply from ${guidPrefix}`);
         break;
       default:
@@ -650,14 +632,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   private async _createUdpSocket(
-    port: number,
     address: string | undefined,
     messageHandler: MessageHandler,
   ): Promise<UdpSocket> {
     const socket = await this.udpSocketCreate({ type: "udp4" });
     socket.on("error", this._handleError);
     socket.on("message", messageHandler);
-    await socket.bind({ port, address });
+    await socket.bind({ address });
     const bound = await socket.localAddress();
     this.log?.debug?.(`Listening on UDP ${bound?.address}:${bound?.port}`);
     return socket;
@@ -688,5 +669,5 @@ async function locatorForSocket(socket: UdpSocket): Promise<Locator | undefined>
   if (addr == undefined) {
     return undefined;
   }
-  return Locator.fromUdpAddress(addr);
+  return locatorFromUdpAddress(addr);
 }

@@ -1,4 +1,33 @@
-import { toHex, toHexFormatted, toHexSeparated } from "./toHex";
+import { fromHex, toHex, toHexFormatted, toHexSeparated } from "./hex";
+
+function byteArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+describe("fromHex", () => {
+  it("should convert hex strings to byte arrays", () => {
+    expect(byteArraysEqual(fromHex(""), new Uint8Array())).toEqual(true);
+    expect(byteArraysEqual(fromHex("00"), new Uint8Array([0]))).toEqual(true);
+    expect(byteArraysEqual(fromHex("01"), new Uint8Array([1]))).toEqual(true);
+    expect(byteArraysEqual(fromHex("0f"), new Uint8Array([15]))).toEqual(true);
+    expect(byteArraysEqual(fromHex("10"), new Uint8Array([16]))).toEqual(true);
+    expect(byteArraysEqual(fromHex("ff"), new Uint8Array([255]))).toEqual(true);
+    expect(byteArraysEqual(fromHex("fffe"), new Uint8Array([255, 254]))).toEqual(true);
+    expect(byteArraysEqual(fromHex("ffff"), new Uint8Array([255, 255]))).toEqual(true);
+    expect(byteArraysEqual(fromHex("01020304"), new Uint8Array([1, 2, 3, 4]))).toEqual(true);
+    expect(byteArraysEqual(fromHex("52545053"), new Uint8Array([0x52, 0x54, 0x50, 0x53]))).toEqual(true); // prettier-ignore
+  });
+});
 
 describe("toHex", () => {
   it("should convert byte arrays to hex", () => {

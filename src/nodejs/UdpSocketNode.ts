@@ -1,7 +1,7 @@
 import dgram from "dgram";
 import EventEmitter from "eventemitter3";
 
-import { UdpAddress, UdpBindOptions, UdpSocket, UdpSocketEvents } from "../networkTypes";
+import { UdpAddress, UdpBindOptions, UdpSocket, UdpSocketEvents } from "../transport";
 
 export class UdpSocketNode extends EventEmitter<UdpSocketEvents> implements UdpSocket {
   private _socket: dgram.Socket;

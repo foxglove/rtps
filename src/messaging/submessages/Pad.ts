@@ -1,6 +1,6 @@
+import { LittleEndian, SubMessageId } from "../../common";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
-import { LittleEndian, SubMessageId } from "../enums";
 
 export class Pad implements SubMessage {
   constructor(public padLength: number) {}

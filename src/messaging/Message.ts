@@ -1,7 +1,5 @@
-import { GuidPrefix, writeGuidPrefix } from "./GuidPrefix";
+import { GuidPrefix, writeGuidPrefix, VendorId, ProtocolVersion } from "../common";
 import { SubMessage } from "./SubMessage";
-import { VendorId } from "./enums";
-import { ProtocolVersion } from "./types";
 
 export type MessageOptions = {
   guidPrefix: GuidPrefix;

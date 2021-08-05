@@ -1,8 +1,14 @@
 import { Time } from "@foxglove/rostime";
 
-import { GuidPrefix, guidPrefixFromData } from "./GuidPrefix";
+import {
+  GuidPrefix,
+  guidPrefixFromData,
+  SubMessageId,
+  VendorId,
+  toHex,
+  ProtocolVersion,
+} from "../common";
 import { SubMessageView } from "./SubMessageView";
-import { SubMessageId, VendorId } from "./enums";
 import {
   AckNackView,
   DataMsgView,
@@ -11,8 +17,6 @@ import {
   InfoTsView,
   PadView,
 } from "./submessages";
-import { toHex } from "./toHex";
-import { ProtocolVersion } from "./types";
 
 export class MessageView {
   readonly data: Readonly<Uint8Array>;
