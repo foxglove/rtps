@@ -46,7 +46,6 @@ import {
   UdpSocketCreate,
   locatorFromUdpAddress,
   discoveryMulticastPort,
-  userMulticastPort,
 } from "./transport";
 
 export interface ParticipantEvents {
@@ -88,12 +87,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   protocolVersion: ProtocolVersion;
   vendorId: VendorId;
   running = true;
-  metatrafficUnicastSocket?: UdpSocket;
-  metatrafficMulticastSocket?: UdpSocket;
-  defaultUnicastSocket?: UdpSocket;
-  defaultMulticastSocket?: UdpSocket;
-  metatrafficUnicastLocator?: Locator;
-  defaultUnicastLocator?: Locator;
+  unicastSocket?: UdpSocket;
+  multicastSocket?: UdpSocket;
+  unicastLocator?: Locator;
   participants = new Map<string, ParticipantView>(); // guidPrefix -> ParticipantView
   ackNackCount = 0;
   heartbeatCount = 0;
@@ -125,24 +121,17 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   async start(): Promise<void> {
     // TODO: Listen on all interfaces
     const address = this.addresses[0]!;
+    this.log?.debug?.(`Starting participant ${this.name} on ${address}`);
 
-    this.metatrafficUnicastSocket = await this._createUdpSocket(
-      address,
-      this._handleMetatrafficMessage,
-    );
-    this.metatrafficUnicastLocator = await locatorForSocket(this.metatrafficUnicastSocket);
-    this.metatrafficMulticastSocket = await this._createMulticastUdpSocket(
+    // Create the multicast UDP socket for discovering other participants and advertising ourself
+    this.multicastSocket = await this._createMulticastUdpSocket(
       discoveryMulticastPort(this.domainId),
-      address,
       this._handleMetatrafficMessage,
     );
-    this.defaultUnicastSocket = await this._createUdpSocket(address, this._handleDefaultMessage);
-    this.defaultUnicastLocator = await locatorForSocket(this.defaultUnicastSocket);
-    this.defaultMulticastSocket = await this._createMulticastUdpSocket(
-      userMulticastPort(this.domainId),
-      address,
-      this._handleDefaultMessage,
-    );
+
+    // Create the unicast UDP socket for sending and receiving directly to participants
+    this.unicastSocket = await this._createUdpSocket(address, this._handleMetatrafficMessage);
+    this.unicastLocator = await locatorForSocket(this.unicastSocket);
   }
 
   shutdown(): void {
@@ -151,10 +140,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this.removeAllListeners();
     this.participants.clear();
 
-    this.metatrafficUnicastSocket?.close();
-    this.metatrafficMulticastSocket?.close();
-    this.defaultUnicastSocket?.close();
-    this.defaultMulticastSocket?.close();
+    this.multicastSocket?.close();
+    this.unicastSocket?.close();
+    this.unicastLocator = undefined;
   }
 
   async sendAlive(): Promise<void> {
@@ -195,7 +183,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     await Promise.all(
       Array.from(this.participants.keys()).map(
         // eslint-disable-next-line @typescript-eslint/promise-function-async
-        (destGuidPrefix) => this._sendMetatrafficTo(msg, destGuidPrefix),
+        (destGuidPrefix) => this._sendMessageTo(msg, destGuidPrefix),
       ),
     );
   }
@@ -239,7 +227,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     msg.writeSubmessage(heartbeat1);
     msg.writeSubmessage(heartbeat2);
 
-    await this._sendMetatrafficTo(msg, participant.guidPrefix);
+    await this._sendMessageTo(msg, participant.guidPrefix);
   }
 
   async subscribeToParticipant(
@@ -247,8 +235,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     timestamp: Time,
     opts: SubscribeOpts,
   ): Promise<void> {
-    if (this.defaultUnicastLocator == undefined || this.metatrafficUnicastLocator == undefined) {
-      throw new Error(`Cannot subscribe before unicast sockets are bound`);
+    if (this.unicastLocator == undefined) {
+      throw new Error(`Cannot subscribe before unicast socket is bound`);
     }
 
     await this._sendInitialHeartbeats(participant);
@@ -303,7 +291,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     msg.writeSubmessage(dataMsg);
     // msg.writeSubmessage(heartbeat);
 
-    await this._sendMetatrafficTo(msg, participant.guidPrefix);
+    await this._sendMessageTo(msg, participant.guidPrefix);
   }
 
   // async unsubscribe(): Promise<void> {}
@@ -312,8 +300,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     destGuidPrefix: GuidPrefix,
     timestamp: Time = fromDate(new Date()),
   ): Promise<void> {
-    if (this.defaultUnicastLocator == undefined || this.metatrafficUnicastLocator == undefined) {
-      throw new Error(`Cannot send participant data before unicast sockets are bound`);
+    if (this.unicastLocator == undefined) {
+      throw new Error(`Cannot send participant data before unicast socket is bound`);
     }
 
     // Parameter list
@@ -325,8 +313,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     parameters.participantGuid(makeGuid(this.guidPrefix, EntityIdBuiltin.Participant));
     parameters.builtinEndpointSet(builtinEndpoints);
     parameters.domainId(this.domainId);
-    parameters.defaultUnicastLocator(this.defaultUnicastLocator);
-    parameters.metatrafficUnicastLocator(this.metatrafficUnicastLocator);
+    parameters.defaultUnicastLocator(this.unicastLocator);
+    parameters.metatrafficUnicastLocator(this.unicastLocator);
     parameters.finish();
 
     // Submessages
@@ -348,7 +336,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     msg.writeSubmessage(infoTs);
     msg.writeSubmessage(dataMsg);
 
-    await this._sendUsertrafficTo(msg, destGuidPrefix);
+    await this._sendMessageTo(msg, destGuidPrefix);
   }
 
   private _handleError = (err: Error): void => {
@@ -359,15 +347,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   };
 
   private _handleMetatrafficMessage = (data: Uint8Array, rinfo: UdpRemoteInfo): void => {
-    this.log?.debug?.(
-      `Received ${data.length} byte metatraffic message from ${rinfo.address}:${rinfo.port}`,
-    );
+    this.log?.debug?.(`Received ${data.length} byte message from ${rinfo.address}:${rinfo.port}`);
 
     const message = new MessageView(data);
     const version = message.protocolVersion;
     if (version.major !== 2) {
       const { major, minor } = version;
-      this.log?.debug?.(`Received metatraffic message with unsupported protocol ${major}.${minor}`);
+      this.log?.debug?.(`Received message with unsupported protocol ${major}.${minor}`);
       return;
     }
 
@@ -388,13 +374,6 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         this._handleDataMsg(message.guidPrefix, msg as DataMsgView);
       }
     }
-  };
-
-  private _handleDefaultMessage = (data: Uint8Array, rinfo: UdpRemoteInfo): void => {
-    this.log?.debug?.(
-      `Received ${data.length} byte default message from ${rinfo.address}:${rinfo.port}`,
-    );
-    this._handleMetatrafficMessage(data, rinfo);
   };
 
   private _handleHeartbeat = (guidPrefix: GuidPrefix, heartbeat: HeartbeatView): void => {
@@ -434,7 +413,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       `Responding to heartbeat for ${makeGuid(guidPrefix, entityId)} (${endpoint.data.topicName})`,
     );
 
-    void this._sendMetatrafficTo(msg, guidPrefix);
+    void this._sendMessageTo(msg, guidPrefix);
   };
 
   private _handleAckNack = (_guidPrefix: GuidPrefix, _ackNack: AckNackView): void => {
@@ -593,7 +572,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     return this.participants.get(guidPrefix)?.endpoints.get(entityId);
   }
 
-  private async _sendMetatrafficTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
+  private async _sendMessageTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
     const participant = this.participants.get(destGuidPrefix);
     if (participant == undefined) {
       this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);
@@ -607,26 +586,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         this.log?.debug?.(
           `Sending ${payload.length} bytes of metatraffic to ${locator} (${destGuidPrefix})`,
         );
-        return this.metatrafficUnicastSocket?.send(payload, locator.port, locator.address);
-      }),
-    );
-  }
-
-  private async _sendUsertrafficTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
-    const participant = this.participants.get(destGuidPrefix);
-    if (participant == undefined) {
-      this.log?.warn?.(`Cannot send usertraffic to unknown participant ${destGuidPrefix}`);
-      return;
-    }
-
-    const locators = participant.defaultUnicastLocatorList;
-    const payload = msg.data;
-    await Promise.all(
-      locators.map((locator) => {
-        this.log?.debug?.(
-          `Sending ${payload.length} bytes of usertraffic to ${locator} (${destGuidPrefix})`,
-        );
-        return this.defaultUnicastSocket?.send(payload, locator.port, locator.address);
+        return this.unicastSocket?.send(payload, locator.port, locator.address);
       }),
     );
   }
@@ -646,7 +606,6 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private async _createMulticastUdpSocket(
     port: number,
-    _address: string | undefined,
     messageHandler: MessageHandler,
   ): Promise<UdpSocket> {
     const socket = await this.udpSocketCreate({ type: "udp4" });
