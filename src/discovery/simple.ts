@@ -1,13 +1,13 @@
 import { Time } from "@foxglove/rostime";
 
-import { DiscoveredParticipantData } from "../ParticipantAttributes";
+import { ParticipantAttributes } from "../ParticipantAttributes";
 import { guidParts, DiscoveredEndpointData } from "../common";
 import { ParametersView } from "../messaging";
 
 export function parseParticipant(
   params: ParametersView,
   timestamp?: Time,
-): DiscoveredParticipantData | undefined {
+): ParticipantAttributes | undefined {
   const protocolVersion = params.protocolVersion();
   const vendorId = params.vendorId();
   const expectsInlineQoS = params.expectsInlineQoS();

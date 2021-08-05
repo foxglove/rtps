@@ -1,6 +1,6 @@
 import { Duration, fromMillis } from "@foxglove/rostime";
 
-import { DiscoveredParticipantData } from "./ParticipantAttributes";
+import { ParticipantAttributes } from "./ParticipantAttributes";
 import {
   EntityId,
   EntityIdBuiltin,
@@ -32,7 +32,7 @@ export class ParticipantView {
   subscriptions = new Map<string, number>(); // topicName -> subscriptionId
   nextSubscriptionId = 6;
 
-  constructor(data: DiscoveredParticipantData) {
+  constructor(data: ParticipantAttributes) {
     this.guidPrefix = data.guidPrefix;
     this.protocolVersion = data.protocolVersion;
     this.vendorId = data.vendorId;
@@ -65,7 +65,7 @@ export class ParticipantView {
     );
   }
 
-  update(data: DiscoveredParticipantData): void {
+  update(data: ParticipantAttributes): void {
     this.protocolVersion = data.protocolVersion;
     this.vendorId = data.vendorId;
     this.expectsInlineQoS = data.expectsInlineQoS;

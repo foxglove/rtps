@@ -2,7 +2,7 @@ import { CdrWriter } from "@foxglove/cdr";
 import { fromDate, Time } from "@foxglove/rostime";
 import { EventEmitter } from "eventemitter3";
 
-import { DiscoveredParticipantData } from "./ParticipantAttributes";
+import { ParticipantAttributes } from "./ParticipantAttributes";
 import { ParticipantView } from "./ParticipantView";
 import {
   EntityId,
@@ -51,7 +51,7 @@ import {
 
 export interface ParticipantEvents {
   error: (error: Error) => void;
-  discoveredParticipant: (participant: DiscoveredParticipantData) => void;
+  discoveredParticipant: (participant: ParticipantAttributes) => void;
   discoveredPublication: (endpoint: DiscoveredEndpointData) => void;
   discoveredSubscription: (endpoint: DiscoveredEndpointData) => void;
   userData: (userData: UserData) => void;

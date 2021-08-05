@@ -9,7 +9,7 @@ import {
   Locator,
 } from "./common";
 
-export type DiscoveredParticipantData = {
+export type ParticipantAttributes = {
   timestamp?: Time;
   guidPrefix: GuidPrefix;
   entityId: EntityId;
