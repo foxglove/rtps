@@ -40,12 +40,14 @@ import {
 } from "./messaging/submessages";
 import { Endpoint } from "./routing";
 import {
-  MULTICAST_IPv4,
   UdpRemoteInfo,
   UdpSocket,
   UdpSocketCreate,
-  locatorFromUdpAddress,
   discoveryMulticastPort,
+  sendMessageTo,
+  createMulticastUdpSocket,
+  createUdpSocket,
+  locatorForSocket,
 } from "./transport";
 
 export interface ParticipantEvents {
@@ -63,8 +65,6 @@ type SubscribeOpts = {
   reliability: ReliabilityAndMaxBlockingTime;
   history: HistoryAndDepth;
 };
-
-type MessageHandler = (data: Uint8Array, rinfo: UdpRemoteInfo) => void;
 
 const builtinEndpoints =
   // BuiltinEndpointSet.ParticipantAnnouncer |
@@ -124,13 +124,24 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this.log?.debug?.(`Starting participant ${this.name} on ${address}`);
 
     // Create the multicast UDP socket for discovering other participants and advertising ourself
-    this.multicastSocket = await this._createMulticastUdpSocket(
+    this.multicastSocket = await createMulticastUdpSocket(
       discoveryMulticastPort(this.domainId),
+      this.udpSocketCreate,
       this._handleMetatrafficMessage,
+      this._handleError,
     );
+    const multiAddr = await this.multicastSocket.localAddress();
+    this.log?.debug?.(`Listening on UDP multicast ${multiAddr?.address}:${multiAddr?.port}`);
 
     // Create the unicast UDP socket for sending and receiving directly to participants
-    this.unicastSocket = await this._createUdpSocket(address, this._handleMetatrafficMessage);
+    this.unicastSocket = await createUdpSocket(
+      address,
+      this.udpSocketCreate,
+      this._handleMetatrafficMessage,
+      this._handleError,
+    );
+    const uniAddr = await this.unicastSocket.localAddress();
+    this.log?.debug?.(`Listening on UDP ${uniAddr?.address}:${uniAddr?.port}`);
     this.unicastLocator = await locatorForSocket(this.unicastSocket);
   }
 
@@ -146,6 +157,11 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   async sendAlive(): Promise<void> {
+    const srcSocket = this.unicastSocket;
+    if (srcSocket == undefined) {
+      throw new Error(`Cannot send before unicast socket is bound`);
+    }
+
     const cdr = new CdrWriter({ size: 24 });
     writeGuidPrefixToCDR(this.guidPrefix, cdr);
     cdr.uint32BE(1); // kind: PARTICIPANT_MESSAGE_DATA_KIND_AUTOMATIC_LIVELINESS_UPDATE
@@ -183,9 +199,23 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     await Promise.all(
       Array.from(this.participants.keys()).map(
         // eslint-disable-next-line @typescript-eslint/promise-function-async
-        (destGuidPrefix) => this._sendMessageTo(msg, destGuidPrefix),
+        (destGuidPrefix) => this.send(msg, destGuidPrefix),
       ),
     );
+  }
+
+  async send(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
+    if (this.unicastSocket == undefined) {
+      throw new Error(`Cannot send before unicast socket is bound`);
+    }
+
+    const participant = this.participants.get(destGuidPrefix);
+    if (participant == undefined) {
+      this.log?.warn?.(`Cannot send to unknown participant ${destGuidPrefix}`);
+      return;
+    }
+
+    await sendMessageTo(msg, this.unicastSocket, participant);
   }
 
   async subscribe(opts: SubscribeOpts): Promise<void> {
@@ -227,7 +257,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     msg.writeSubmessage(heartbeat1);
     msg.writeSubmessage(heartbeat2);
 
-    await this._sendMessageTo(msg, participant.guidPrefix);
+    await this.send(msg, participant.guidPrefix);
   }
 
   async subscribeToParticipant(
@@ -291,7 +321,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     msg.writeSubmessage(dataMsg);
     // msg.writeSubmessage(heartbeat);
 
-    await this._sendMessageTo(msg, participant.guidPrefix);
+    await this.send(msg, participant.guidPrefix);
   }
 
   // async unsubscribe(): Promise<void> {}
@@ -336,7 +366,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     msg.writeSubmessage(infoTs);
     msg.writeSubmessage(dataMsg);
 
-    await this._sendMessageTo(msg, destGuidPrefix);
+    await this.send(msg, destGuidPrefix);
   }
 
   private _handleError = (err: Error): void => {
@@ -413,7 +443,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       `Responding to heartbeat for ${makeGuid(guidPrefix, entityId)} (${endpoint.data.topicName})`,
     );
 
-    void this._sendMessageTo(msg, guidPrefix);
+    void this.send(msg, guidPrefix);
   };
 
   private _handleAckNack = (_guidPrefix: GuidPrefix, _ackNack: AckNackView): void => {
@@ -571,62 +601,4 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   private _getEndpoint(guidPrefix: GuidPrefix, entityId: EntityId): Endpoint | undefined {
     return this.participants.get(guidPrefix)?.endpoints.get(entityId);
   }
-
-  private async _sendMessageTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
-    const participant = this.participants.get(destGuidPrefix);
-    if (participant == undefined) {
-      this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);
-      return;
-    }
-
-    const locators = participant.metatrafficUnicastLocatorList;
-    const payload = msg.data;
-    await Promise.all(
-      locators.map((locator) => {
-        this.log?.debug?.(
-          `Sending ${payload.length} bytes of metatraffic to ${locator} (${destGuidPrefix})`,
-        );
-        return this.unicastSocket?.send(payload, locator.port, locator.address);
-      }),
-    );
-  }
-
-  private async _createUdpSocket(
-    address: string | undefined,
-    messageHandler: MessageHandler,
-  ): Promise<UdpSocket> {
-    const socket = await this.udpSocketCreate({ type: "udp4" });
-    socket.on("error", this._handleError);
-    socket.on("message", messageHandler);
-    await socket.bind({ address });
-    const bound = await socket.localAddress();
-    this.log?.debug?.(`Listening on UDP ${bound?.address}:${bound?.port}`);
-    return socket;
-  }
-
-  private async _createMulticastUdpSocket(
-    port: number,
-    messageHandler: MessageHandler,
-  ): Promise<UdpSocket> {
-    const socket = await this.udpSocketCreate({ type: "udp4" });
-    socket.on("error", this._handleError);
-    socket.on("message", messageHandler);
-    await socket.bind({ port });
-    await socket.setBroadcast(true);
-    await socket.setMulticastTTL(64);
-    await socket.addMembership(MULTICAST_IPv4);
-    const bound = await socket.localAddress();
-    this.log?.debug?.(
-      `Listening on UDP multicast ${MULTICAST_IPv4}:${bound?.port} (interface ${bound?.address})`,
-    );
-    return socket;
-  }
-}
-
-async function locatorForSocket(socket: UdpSocket): Promise<Locator | undefined> {
-  const addr = await socket.localAddress();
-  if (addr == undefined) {
-    return undefined;
-  }
-  return locatorFromUdpAddress(addr);
 }

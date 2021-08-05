@@ -1,5 +1,7 @@
+import { ParticipantView } from "../ParticipantView";
 import { Locator, LocatorKind, ipv6ToBytes, ipv4ToBytes } from "../common";
-import { UdpAddress } from "./networkTypes";
+import { Message } from "../messaging";
+import { UdpAddress, UdpRemoteInfo, UdpSocket, UdpSocketCreate } from "./networkTypes";
 
 export const MULTICAST_IPv4 = "239.255.0.1";
 
@@ -44,4 +46,54 @@ export function locatorFromUdpAddress(address: UdpAddress): Locator {
   } else {
     throw new Error(`Unrecognized UDP address family "${address.family}"`);
   }
+}
+
+export async function sendMessageTo(
+  msg: Message,
+  srcSocket: UdpSocket,
+  destParticipant: ParticipantView,
+): Promise<void> {
+  const locators = destParticipant.metatrafficUnicastLocatorList;
+  const payload = msg.data;
+  await Promise.all(
+    // eslint-disable-next-line @typescript-eslint/promise-function-async
+    locators.map((locator) => srcSocket.send(payload, locator.port, locator.address)),
+  );
+}
+
+export async function createUdpSocket(
+  address: string | undefined,
+  udpSocketCreate: UdpSocketCreate,
+  messageHandler: (data: Uint8Array, rinfo: UdpRemoteInfo) => void,
+  errorHandler: (err: Error) => void,
+): Promise<UdpSocket> {
+  const socket = await udpSocketCreate({ type: "udp4" });
+  socket.on("error", errorHandler);
+  socket.on("message", messageHandler);
+  await socket.bind({ address });
+  return socket;
+}
+
+export async function createMulticastUdpSocket(
+  port: number,
+  udpSocketCreate: UdpSocketCreate,
+  messageHandler: (data: Uint8Array, rinfo: UdpRemoteInfo) => void,
+  errorHandler: (err: Error) => void,
+): Promise<UdpSocket> {
+  const socket = await udpSocketCreate({ type: "udp4" });
+  socket.on("error", errorHandler);
+  socket.on("message", messageHandler);
+  await socket.bind({ port });
+  await socket.setBroadcast(true);
+  await socket.setMulticastTTL(64);
+  await socket.addMembership(MULTICAST_IPv4);
+  return socket;
+}
+
+export async function locatorForSocket(socket: UdpSocket): Promise<Locator | undefined> {
+  const addr = await socket.localAddress();
+  if (addr == undefined) {
+    return undefined;
+  }
+  return locatorFromUdpAddress(addr);
 }
