@@ -1,6 +1,5 @@
 import { Duration, fromMillis } from "@foxglove/rostime";
 
-import { Endpoint } from "./Endpoint";
 import { DiscoveredParticipantData } from "./ParticipantAttributes";
 import {
   EntityId,
@@ -15,6 +14,7 @@ import {
   ProtocolVersion,
   DiscoveredEndpointData,
 } from "./common";
+import { Endpoint } from "./routing";
 
 export class ParticipantView {
   guidPrefix: GuidPrefix;

@@ -2,7 +2,6 @@ import { CdrWriter } from "@foxglove/cdr";
 import { fromDate, Time } from "@foxglove/rostime";
 import { EventEmitter } from "eventemitter3";
 
-import { Endpoint } from "./Endpoint";
 import { DiscoveredParticipantData } from "./ParticipantAttributes";
 import { ParticipantView } from "./ParticipantView";
 import {
@@ -39,6 +38,7 @@ import {
   InfoDst,
   InfoTs,
 } from "./messaging/submessages";
+import { Endpoint } from "./routing";
 import {
   MULTICAST_IPv4,
   UdpRemoteInfo,

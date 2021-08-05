@@ -1,8 +1,8 @@
 import { Time } from "@foxglove/rostime";
 
-import { Guid } from "./Guid";
-import { SequenceNumber } from "./SequenceNumber";
-import { ChangeKind } from "./enums";
+import { Guid } from "../common/Guid";
+import { SequenceNumber } from "../common/SequenceNumber";
+import { ChangeKind } from "../common/enums";
 
 export type CacheChange = {
   timestamp: Time;

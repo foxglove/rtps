@@ -1,6 +1,6 @@
-import { ParticipantView } from "./ParticipantView";
-import { EntityId, DiscoveredEndpointData } from "./common";
-import { HistoryCache } from "./history/HistoryCache";
+import { ParticipantView } from "../ParticipantView";
+import { EntityId, DiscoveredEndpointData } from "../common";
+import { HistoryCache } from "../history";
 
 export type EndpointOpts = {
   participant: ParticipantView;

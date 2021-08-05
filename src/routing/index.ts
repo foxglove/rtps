@@ -1,1 +1,1 @@
-export const ROUTING_PLACEHOLDER = 0;
+export * from "./Endpoint";

@@ -1,4 +1,3 @@
-export * from "./CacheChange";
 export * from "./DurabilityService";
 export * from "./EntityId";
 export * from "./enums";
