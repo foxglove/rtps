@@ -1,3 +1,4 @@
+import { CdrWriter } from "@foxglove/cdr";
 import { fromDate, Time } from "@foxglove/rostime";
 import { EventEmitter } from "eventemitter3";
 
@@ -13,6 +14,7 @@ import {
 import { Endpoint } from "./Endpoint";
 import {
   EntityId,
+  EntityIdBuiltinParticipantMessageReader,
   EntityIdBuiltinParticipantMessageWriter,
   EntityIdBuiltinParticipantReader,
   EntityIdBuiltinParticipantWriter,
@@ -21,34 +23,60 @@ import {
   EntityIdBuiltinTypeLookupReplyWriter,
   EntityIdBuiltinTypeLookupRequestWriter,
   EntityIdParticipant,
+  EntityIdUnknown,
+  makeEntityId,
 } from "./EntityId";
 import { makeGuid } from "./Guid";
-import { generateGuidPrefix, GuidPrefix } from "./GuidPrefix";
+import { generateGuidPrefix, GuidPrefix, writeGuidPrefixToCDR } from "./GuidPrefix";
 import { Locator } from "./Locator";
 import { LoggerService } from "./LoggerService";
 import { Message } from "./Message";
 import { MessageView } from "./MessageView";
 import { Parameters } from "./Parameters";
 import { ParticipantView } from "./ParticipantView";
-import { BuiltinEndpointSet, ChangeKind, SubMessageId, VendorId } from "./enums";
+import {
+  BuiltinEndpointSet,
+  ChangeKind,
+  Durability,
+  EntityKind,
+  SubMessageId,
+  VendorId,
+} from "./enums";
 import { UdpRemoteInfo, UdpSocket, UdpSocketCreate } from "./networkTypes";
 import {
   AckNack,
   AckNackView,
   DataMsg,
   DataMsgView,
+  Heartbeat,
   HeartbeatView,
   InfoDst,
   InfoTs,
 } from "./submessages";
-import { DiscoveredParticipantData, UserData, DiscoveredEndpointData } from "./types";
+import {
+  DiscoveredParticipantData,
+  UserData,
+  DiscoveredEndpointData,
+  HistoryAndDepth,
+  ProtocolVersion,
+  ReliabilityAndMaxBlockingTime,
+} from "./types";
 
 export interface ParticipantEvents {
   error: (error: Error) => void;
   discoveredParticipant: (participant: DiscoveredParticipantData) => void;
-  discoveredEndpoint: (endpoint: DiscoveredEndpointData) => void;
+  discoveredPublication: (endpoint: DiscoveredEndpointData) => void;
+  discoveredSubscription: (endpoint: DiscoveredEndpointData) => void;
   userData: (userData: UserData) => void;
 }
+
+type SubscribeOpts = {
+  topicName: string;
+  typeName: string;
+  durability: Durability;
+  reliability: ReliabilityAndMaxBlockingTime;
+  history: HistoryAndDepth;
+};
 
 type MessageHandler = (data: Uint8Array, rinfo: UdpRemoteInfo) => void;
 
@@ -57,9 +85,9 @@ const builtinEndpoints =
   BuiltinEndpointSet.ParticipantDetector |
   // BuiltinEndpointSet.PublicationAnnouncer |
   BuiltinEndpointSet.PublicationDetector |
-  // BuiltinEndpointSet.SubscriptionAnnouncer |
+  BuiltinEndpointSet.SubscriptionAnnouncer |
   BuiltinEndpointSet.SubscriptionDetector |
-  // BuiltinEndpointSet.ParticipantMessageDataWriter |
+  BuiltinEndpointSet.ParticipantMessageDataWriter |
   BuiltinEndpointSet.ParticipantMessageDataReader;
 
 export class Participant extends EventEmitter<ParticipantEvents> {
@@ -70,6 +98,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   addresses: string[];
   udpSocketCreate: UdpSocketCreate;
   log?: LoggerService;
+  protocolVersion: ProtocolVersion;
+  vendorId: VendorId;
   running = true;
   metatrafficUnicastSocket?: UdpSocket;
   metatrafficMulticastSocket?: UdpSocket;
@@ -77,7 +107,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   defaultMulticastSocket?: UdpSocket;
   metatrafficUnicastLocator?: Locator;
   defaultUnicastLocator?: Locator;
-  participants = new Map<string, ParticipantView>();
+  participants = new Map<string, ParticipantView>(); // guidPrefix -> ParticipantView
+  ackNackCount = 0;
+  heartbeatCount = 0;
 
   constructor(options: {
     name: string;
@@ -87,6 +119,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     guidPrefix?: GuidPrefix;
     udpSocketCreate: UdpSocketCreate;
     log?: LoggerService;
+    protocolVersion?: ProtocolVersion;
+    vendorId?: VendorId;
   }) {
     super();
 
@@ -97,6 +131,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this.addresses = options.addresses;
     this.udpSocketCreate = options.udpSocketCreate;
     this.log = options.log;
+    this.protocolVersion = options.protocolVersion ?? { major: 2, minor: 1 };
+    this.vendorId = options.vendorId ?? VendorId.EclipseCycloneDDS;
   }
 
   async start(): Promise<void> {
@@ -139,6 +175,157 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this.defaultMulticastSocket?.close();
   }
 
+  async sendAlive(): Promise<void> {
+    const cdr = new CdrWriter({ size: 24 });
+    writeGuidPrefixToCDR(this.guidPrefix, cdr);
+    cdr.uint32BE(1); // kind: PARTICIPANT_MESSAGE_DATA_KIND_AUTOMATIC_LIVELINESS_UPDATE
+    cdr.sequenceLength(1);
+    cdr.uint8(0);
+    cdr.align(4);
+
+    // Submessages
+    const infoTs = new InfoTs(fromDate(new Date()));
+    const dataMsg = new DataMsg(
+      EntityIdBuiltinParticipantMessageReader,
+      EntityIdBuiltinParticipantMessageWriter,
+      1n, // FIXME
+      cdr.data,
+      false,
+      true,
+      false,
+    );
+    const heartbeat = new Heartbeat(
+      EntityIdBuiltinParticipantMessageReader,
+      EntityIdBuiltinParticipantMessageWriter,
+      1n, // FIXME
+      1n,
+      ++this.heartbeatCount,
+      false,
+      false,
+    );
+
+    // RTPS message
+    const msg = new Message({ guidPrefix: this.guidPrefix });
+    msg.writeSubmessage(infoTs);
+    msg.writeSubmessage(dataMsg);
+    msg.writeSubmessage(heartbeat);
+
+    await Promise.all(
+      Array.from(this.participants.keys()).map(
+        // eslint-disable-next-line @typescript-eslint/promise-function-async
+        (destGuidPrefix) => this._sendMetatrafficTo(msg, destGuidPrefix),
+      ),
+    );
+  }
+
+  async subscribe(opts: SubscribeOpts): Promise<void> {
+    const timestamp = fromDate(new Date());
+
+    await Promise.all(
+      Array.from(this.participants.values()).map(
+        // eslint-disable-next-line @typescript-eslint/promise-function-async
+        (participant) => this.subscribeToParticipant(participant, timestamp, opts),
+      ),
+    );
+  }
+
+  private async _sendInitialHeartbeats(participant: ParticipantView): Promise<void> {
+    // Submessages
+    const infoDst = new InfoDst(participant.guidPrefix);
+    const heartbeat1 = new Heartbeat(
+      EntityIdUnknown,
+      EntityIdBuiltinSubscriptionsWriter,
+      1n,
+      1n,
+      ++this.heartbeatCount,
+      false,
+      false,
+    );
+    const heartbeat2 = new Heartbeat(
+      EntityIdUnknown,
+      EntityIdBuiltinParticipantMessageWriter,
+      1n,
+      0n,
+      ++this.heartbeatCount,
+      false,
+      false,
+    );
+
+    // RTPS message
+    const msg = new Message({ guidPrefix: this.guidPrefix });
+    msg.writeSubmessage(infoDst);
+    msg.writeSubmessage(heartbeat1);
+    msg.writeSubmessage(heartbeat2);
+
+    await this._sendMetatrafficTo(msg, participant.guidPrefix);
+  }
+
+  async subscribeToParticipant(
+    participant: ParticipantView,
+    timestamp: Time,
+    opts: SubscribeOpts,
+  ): Promise<void> {
+    if (this.defaultUnicastLocator == undefined || this.metatrafficUnicastLocator == undefined) {
+      throw new Error(`Cannot subscribe before unicast sockets are bound`);
+    }
+
+    await this._sendInitialHeartbeats(participant);
+
+    const subscriptionId = participant.addSubscription(opts.topicName);
+    const readerEntityId = makeEntityId(subscriptionId, EntityKind.AppdefReaderNoKey);
+    const endpointGuid = makeGuid(this.guidPrefix, readerEntityId);
+
+    this.log?.info?.(
+      `Creating subscription ${endpointGuid} to ${opts.topicName} (${opts.typeName})`,
+    );
+
+    // Parameter list
+    const parameters = new Parameters();
+    parameters.topicName(opts.topicName);
+    parameters.typeName(opts.typeName);
+    // parameters.durability(opts.durability);
+    parameters.reliability(opts.reliability);
+    parameters.history(opts.history);
+    parameters.protocolVersion(this.protocolVersion);
+    parameters.vendorId(this.vendorId);
+    parameters.endpointGuid(endpointGuid);
+    parameters.adlinkEntityFactory(1);
+    parameters.finish();
+
+    // Submessages
+    // const infoDst = new InfoDst(participant.guidPrefix);
+    const infoTs = new InfoTs(timestamp);
+    const dataMsg = new DataMsg(
+      EntityIdUnknown,
+      EntityIdBuiltinSubscriptionsWriter,
+      1n, // FIXME
+      parameters.data,
+      false,
+      true,
+      false,
+    );
+    // const heartbeat = new Heartbeat(
+    //   EntityIdBuiltinSubscriptionsReader,
+    //   EntityIdBuiltinSubscriptionsWriter,
+    //   1n, // FIXME
+    //   1n,
+    //   ++this.heartbeatCount,
+    //   false,
+    //   false,
+    // );
+
+    // RTPS message
+    const msg = new Message({ guidPrefix: this.guidPrefix });
+    // msg.writeSubmessage(infoDst);
+    msg.writeSubmessage(infoTs);
+    msg.writeSubmessage(dataMsg);
+    // msg.writeSubmessage(heartbeat);
+
+    await this._sendMetatrafficTo(msg, participant.guidPrefix);
+  }
+
+  // async unsubscribe(): Promise<void> {}
+
   async sendParticipantData(
     destGuidPrefix: GuidPrefix,
     timestamp: Time = fromDate(new Date()),
@@ -166,7 +353,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const dataMsg = new DataMsg(
       EntityIdBuiltinParticipantReader,
       EntityIdBuiltinParticipantWriter,
-      1n,
+      1n, // FIXME
       parameters.data,
       false,
       true,
@@ -179,7 +366,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     msg.writeSubmessage(infoTs);
     msg.writeSubmessage(dataMsg);
 
-    await this._sendMetatrafficTo(msg, destGuidPrefix);
+    await this._sendUsertrafficTo(msg, destGuidPrefix);
   }
 
   private _handleError = (err: Error): void => {
@@ -225,6 +412,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this.log?.debug?.(
       `Received ${data.length} byte default message from ${rinfo.address}:${rinfo.port}`,
     );
+    this._handleMetatrafficMessage(data, rinfo);
   };
 
   private _handleHeartbeat = (guidPrefix: GuidPrefix, heartbeat: HeartbeatView): void => {
@@ -240,6 +428,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       heartbeat.lastSeqNumber,
     );
 
+    // If the final flag is set and we have no missing sequence numbers, do not send a heartbeat
     if (heartbeat.final && sequenceNumSet.empty()) {
       return;
     }
@@ -250,7 +439,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       endpoint.readerEntityId,
       endpoint.writerEntityId,
       sequenceNumSet,
-      ++endpoint.participant.ackNackCount,
+      ++this.ackNackCount,
       true,
     );
 
@@ -334,12 +523,14 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   };
 
   private _handleParticipantMessage = (
-    _senderGuidPrefix: GuidPrefix,
-    _dataMsg: DataMsgView,
+    senderGuidPrefix: GuidPrefix,
+    dataMsg: DataMsgView,
     _timestamp: Time | undefined,
   ): void => {
     // TODO: Handle this when we have a concept of participant alive/stale states
-    this.log?.debug?.(`Received participant message from ${_dataMsg.writerEntityId}`);
+    this.log?.debug?.(
+      `Received participant message from ${makeGuid(senderGuidPrefix, dataMsg.writerEntityId)}`,
+    );
   };
 
   private _handlePublicationOrSubscription = (
@@ -357,7 +548,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const endpointData = parseEndpoint(params, timestamp);
     if (endpointData == undefined) {
       this.log?.warn?.(
-        `Failed to parse endpoint data from ${senderGuidPrefix}:\n${params.allParameters()}`,
+        `Failed to parse endpoint data from ${senderGuidPrefix}:\n${JSON.stringify(
+          Array.from(params.allParameters().entries()),
+        )}`,
       );
       return;
     }
@@ -390,7 +583,11 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         participant.topicToEntityId.set(endpointData.topicName, endpointData.entityId);
       }
 
-      this.emit("discoveredEndpoint", endpointData);
+      if (isPublication) {
+        this.emit("discoveredPublication", endpointData);
+      } else {
+        this.emit("discoveredSubscription", endpointData);
+      }
     }
   };
 
@@ -398,9 +595,6 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const writerGuid = makeGuid(guidPrefix, dataMsg.writerEntityId);
     const sequenceNumber = dataMsg.writerSeqNumber;
     const serializedData = dataMsg.serializedData;
-    this.log?.debug?.(
-      `  DATA: ${serializedData.length} bytes (seq ${sequenceNumber}) from ${writerGuid} (history is size ${endpoint.history.size})`,
-    );
     endpoint.history.add(sequenceNumber, {
       timestamp: dataMsg.effectiveTimestamp ?? fromDate(new Date()),
       kind: ChangeKind.Alive,
@@ -408,6 +602,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       sequenceNumber,
       data: serializedData,
     });
+    this.log?.debug?.(
+      `  DATA: ${serializedData.length} bytes (seq ${sequenceNumber}) from ${writerGuid} (history is size ${endpoint.history.size})`,
+    );
   }
 
   private _getEndpoint(guidPrefix: GuidPrefix, entityId: EntityId): Endpoint | undefined {
@@ -433,24 +630,24 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     );
   }
 
-  // private async _sendDefaultTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
-  //   const participant = this.participants.get(destGuidPrefix);
-  //   if (participant == undefined) {
-  //     this.log?.warn?.(`Cannot send metatraffic to unknown participant ${destGuidPrefix}`);
-  //     return;
-  //   }
+  private async _sendUsertrafficTo(msg: Message, destGuidPrefix: GuidPrefix): Promise<void> {
+    const participant = this.participants.get(destGuidPrefix);
+    if (participant == undefined) {
+      this.log?.warn?.(`Cannot send usertraffic to unknown participant ${destGuidPrefix}`);
+      return;
+    }
 
-  //   const locators = participant.defaultUnicastLocatorList;
-  //   const payload = msg.data;
-  //   await Promise.all(
-  //     locators.map((locator) => {
-  //       this.log?.debug?.(
-  //         `Sending ${payload.length} bytes of user data to ${locator} (${destGuidPrefix})`,
-  //       );
-  //       return this.defaultUnicastSocket?.send(payload, locator.port, locator.address);
-  //     }),
-  //   );
-  // }
+    const locators = participant.defaultUnicastLocatorList;
+    const payload = msg.data;
+    await Promise.all(
+      locators.map((locator) => {
+        this.log?.debug?.(
+          `Sending ${payload.length} bytes of usertraffic to ${locator} (${destGuidPrefix})`,
+        );
+        return this.defaultUnicastSocket?.send(payload, locator.port, locator.address);
+      }),
+    );
+  }
 
   private async _createUdpSocket(
     port: number,

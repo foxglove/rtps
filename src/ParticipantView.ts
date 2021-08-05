@@ -1,4 +1,4 @@
-import { Duration } from "@foxglove/rostime";
+import { Duration, fromMillis } from "@foxglove/rostime";
 
 import { Endpoint } from "./Endpoint";
 import {
@@ -28,8 +28,9 @@ export class ParticipantView {
   availableBuiltinEndpoints: BuiltinEndpointSet;
   leaseDuration: Duration;
   endpoints = new Map<EntityId, Endpoint>(); // entityId -> Endpoint
-  topicToEntityId = new Map<string, number>(); // topicName -> entityId
-  ackNackCount = 0;
+  topicToEntityId = new Map<string, EntityId>(); // topicName -> writer entityId
+  subscriptions = new Map<string, number>(); // topicName -> subscriptionId
+  nextSubscriptionId = 6;
 
   constructor(data: DiscoveredParticipantData) {
     this.guidPrefix = data.guidPrefix;
@@ -76,6 +77,16 @@ export class ParticipantView {
     this.leaseDuration = data.leaseDuration;
   }
 
+  addSubscription(topicName: string): number {
+    let subscriptionId = this.subscriptions.get(topicName);
+    if (subscriptionId != undefined) {
+      return subscriptionId;
+    }
+    subscriptionId = this.nextSubscriptionId++;
+    this.subscriptions.set(topicName, subscriptionId);
+    return subscriptionId;
+  }
+
   private maybeAddBuiltin(
     endpointsAvailable: BuiltinEndpointSet,
     flag: BuiltinEndpointSet,
@@ -86,7 +97,7 @@ export class ParticipantView {
       const data: DiscoveredEndpointData = {
         guidPrefix: this.guidPrefix,
         entityId: writerEntityId,
-        reliability: Reliability.Reliable,
+        reliability: { kind: Reliability.Reliable, maxBlockingTime: fromMillis(100) },
         history: { kind: History.KeepLast, depth: 0 },
         protocolVersion: this.protocolVersion,
         vendorId: this.vendorId,

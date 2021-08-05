@@ -1,19 +1,12 @@
 import { CdrReader } from "@foxglove/cdr";
-import { Duration } from "@foxglove/rostime";
+import { Duration, Time } from "@foxglove/rostime";
 
 import { DurabilityService } from "./DurabilityService";
 import { entityIdFromCDR } from "./EntityId";
 import { Guid, guidFromCDR } from "./Guid";
 import { Locator } from "./Locator";
-import {
-  BuiltinEndpointSet,
-  Durability,
-  History,
-  ParameterId,
-  Reliability,
-  VendorId,
-} from "./enums";
-import { HistoryAndDepth, ProtocolVersion } from "./types";
+import { BuiltinEndpointSet, Durability, History, ParameterId, VendorId } from "./enums";
+import { HistoryAndDepth, ProtocolVersion, ReliabilityAndMaxBlockingTime } from "./types";
 
 const textDecoder = new TextDecoder();
 
@@ -62,8 +55,8 @@ export class ParametersView {
     return this.map.get(ParameterId.PID_DURABILITY) as Durability | undefined;
   }
 
-  reliability(): Reliability | undefined {
-    return this.map.get(ParameterId.PID_RELIABILITY) as Reliability | undefined;
+  reliability(): ReliabilityAndMaxBlockingTime | undefined {
+    return this.map.get(ParameterId.PID_RELIABILITY) as ReliabilityAndMaxBlockingTime | undefined;
   }
 
   history(): HistoryAndDepth | undefined {
@@ -145,9 +138,9 @@ function getParameterValue(id: ParameterId, length: number, reader: CdrReader): 
     // case ParameterId.PID_LATENCY_BUDGET:
     // case ParameterId.PID_LIVELINESS:
     case ParameterId.PID_RELIABILITY:
-      return reader.uint32();
+      return { kind: reader.uint32(), maxBlockingTime: readTime(reader) };
     case ParameterId.PID_LIFESPAN:
-      return { sec: reader.int32(), nsec: reader.uint32() };
+      return readTime(reader);
     // case ParameterId.PID_DESTINATION_ORDER:
     case ParameterId.PID_HISTORY:
       return { kind: reader.uint32() as History, depth: reader.int32() };
@@ -186,7 +179,7 @@ function getParameterValue(id: ParameterId, length: number, reader: CdrReader): 
     // case ParameterId.PID_PARTICIPANT_MANUAL_LIVELINESS_COUNT:
     // case ParameterId.PID_PARTICIPANT_BUILTIN_ENDPOINTS:
     case ParameterId.PID_PARTICIPANT_LEASE_DURATION:
-      return { sec: reader.int32(), nsec: reader.uint32() };
+      return readTime(reader);
     // case ParameterId.PID_CONTENT_FILTER_PROPERTY:
     case ParameterId.PID_PARTICIPANT_GUID:
       return guidFromCDR(reader);
@@ -228,4 +221,8 @@ function getParameterValue(id: ParameterId, length: number, reader: CdrReader): 
     default:
       return reader.uint8Array(length);
   }
+}
+
+function readTime(reader: CdrReader): Time {
+  return { sec: reader.int32(), nsec: reader.uint32() };
 }

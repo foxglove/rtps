@@ -1,5 +1,14 @@
-import { Participant, selectIPv4, DiscoveredParticipantData } from "../src";
+import {
+  Participant,
+  selectIPv4,
+  DiscoveredParticipantData,
+  Durability,
+  Reliability,
+  History,
+} from "../src";
 import { getNetworkInterfaces, UdpSocketNode } from "../src/nodejs";
+
+const DURATION_INFINITE = { sec: 0x7fffffff, nsec: 0xffffffff };
 
 async function main() {
   const address = selectIPv4(getNetworkInterfaces());
@@ -12,18 +21,39 @@ async function main() {
   });
   await participant.start();
 
+  participant.on("discoveredPublication", (endpoint) => {
+    console.dir(endpoint);
+  });
+
+  participant.on("discoveredSubscription", (endpoint) => {
+    console.dir(endpoint);
+  });
+
   const other = await new Promise<DiscoveredParticipantData>((resolve, reject) => {
     participant.once("discoveredParticipant", resolve);
     participant.once("error", reject);
   });
 
-  participant.on("discoveredEndpoint", (endpoint) => {
-    console.dir(endpoint);
-  });
-
-  console.dir(other);
+  // console.dir(other);
 
   await participant.sendParticipantData(other.guidPrefix);
+
+  // await participant.subscribe({
+  //   topicName: "ros_discovery_info",
+  //   typeName: "rmw_dds_common::msg::dds_::ParticipantEntitiesInfo_",
+  //   durability: Durability.TransientLocal,
+  //   reliability: { kind: Reliability.Reliable, maxBlockingTime: DURATION_INFINITE },
+  //   history: { kind: History.KeepAll, depth: -1 },
+  // });
+  await participant.subscribe({
+    topicName: "rt/chatter",
+    typeName: "std_msgs::msg::dds_::String_",
+    durability: Durability.TransientLocal,
+    reliability: { kind: Reliability.Reliable, maxBlockingTime: DURATION_INFINITE },
+    history: { kind: History.KeepLast, depth: 10 },
+  });
+
+  await participant.sendAlive();
 
   await new Promise((r) => setTimeout(r, 10000));
 

@@ -5,6 +5,7 @@ import { uint32ToHex } from "./toHex";
 
 export type EntityId = number; // 32-bit unsigned integer
 
+export const EntityIdUnknown = 0;
 export const EntityIdParticipant = 0x0001c1; // makeEntityId(0x0001, EntityKind.BuiltinParticipant);
 export const EntityIdBuiltinPublicationsReader = 0x0003c7; // makeEntityId(0x0003, EntityKind.BuiltinReaderWithKey); // prettier-ignore
 export const EntityIdBuiltinPublicationsWriter = 0x0003c2; // makeEntityId(0x0003, EntityKind.BuiltinWriterWithKey); // prettier-ignore

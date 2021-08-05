@@ -16,6 +16,11 @@ export type HistoryAndDepth = {
   depth: number;
 };
 
+export type ReliabilityAndMaxBlockingTime = {
+  kind: Reliability;
+  maxBlockingTime: Duration;
+};
+
 export type DiscoveredParticipantData = {
   timestamp?: Time;
   guidPrefix: GuidPrefix;
@@ -38,7 +43,7 @@ export type DiscoveredEndpointData = {
   entityId: EntityId;
   topicName?: string;
   typeName?: string;
-  reliability: Reliability;
+  reliability: ReliabilityAndMaxBlockingTime;
   history: HistoryAndDepth;
   protocolVersion: ProtocolVersion;
   vendorId: VendorId;

@@ -52,7 +52,8 @@ export class HistoryCache {
     lastSeqNumber: SequenceNumber,
   ): SequenceNumberSet {
     if (lastSeqNumber < firstSeqNumber) {
-      throw new Error(`Invalid sequence number range [${firstSeqNumber}, ${lastSeqNumber}]`);
+      // eslint-disable-next-line no-param-reassign
+      firstSeqNumber = lastSeqNumber;
     }
     // FIXME: This is not correct. base should be set to the first missing sequence number, or
     // lastSeqNumber + 1. numBits is only non-zero if there are misses
