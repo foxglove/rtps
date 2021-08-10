@@ -1,26 +1,29 @@
-import { ParticipantView } from "../ParticipantView";
-import { EntityId, DiscoveredEndpointData } from "../common";
+import { Time } from "@foxglove/rostime";
+
+import {
+  EntityId,
+  GuidPrefix,
+  HistoryAndDepth,
+  ProtocolVersion,
+  ReliabilityAndMaxBlockingTime,
+  VendorId,
+} from "../common";
 import { HistoryCache } from "../history";
 
-export type EndpointOpts = {
-  participant: ParticipantView;
-  readerEntityId: EntityId;
-  writerEntityId: EntityId;
-  data: DiscoveredEndpointData;
+export type EndpointAttributes = {
+  timestamp?: Time;
+  guidPrefix: GuidPrefix;
+  entityId: EntityId;
+  topicName?: string;
+  typeName?: string;
+  reliability: ReliabilityAndMaxBlockingTime;
+  history: HistoryAndDepth;
+  protocolVersion: ProtocolVersion;
+  vendorId: VendorId;
+  userData?: string;
 };
 
-export class Endpoint {
-  participant: ParticipantView;
-  readerEntityId: EntityId;
-  writerEntityId: EntityId;
-  data: DiscoveredEndpointData;
+export interface Endpoint {
+  attributes: EndpointAttributes;
   history: HistoryCache;
-
-  constructor(opts: EndpointOpts) {
-    this.participant = opts.participant;
-    this.readerEntityId = opts.readerEntityId;
-    this.writerEntityId = opts.writerEntityId;
-    this.data = opts.data;
-    this.history = new HistoryCache();
-  }
 }

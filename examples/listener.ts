@@ -15,7 +15,6 @@ async function main() {
   const participant = new Participant({
     name: "listener",
     addresses: [address],
-    participantId: 1,
     udpSocketCreate: UdpSocketNode.Create,
     log: console,
   });
@@ -33,10 +32,9 @@ async function main() {
     participant.once("discoveredParticipant", resolve);
     participant.once("error", reject);
   });
+  console.log(`Discovered participant ${other.guidPrefix}`);
 
-  // console.dir(other);
-
-  await participant.sendParticipantData(other.guidPrefix);
+  await participant.advertiseParticipant();
 
   // await participant.subscribe({
   //   topicName: "ros_discovery_info",

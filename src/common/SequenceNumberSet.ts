@@ -1,4 +1,4 @@
-import { SequenceNumber, sequenceNumberToData } from "./SequenceNumber";
+import { SequenceNumber, sequenceNumberFromData, sequenceNumberToData } from "./SequenceNumber";
 
 const MAX_BITS = 256;
 const MAX_ITEMS = 8;
@@ -58,6 +58,10 @@ export class SequenceNumberSet {
     }
   }
 
+  maxSequenceNumber(): SequenceNumber {
+    return this.base_ + BigInt(this.numBits_);
+  }
+
   *sequenceNumbers(): Generator<SequenceNumber> {
     let offset = 0;
     let idx = 0;
@@ -74,12 +78,11 @@ export class SequenceNumberSet {
         }
       }
     }
-    yield 1n;
   }
 
   static fromData(view: DataView, offset: number, littleEndian: boolean): SequenceNumberSet {
-    const bitmapBase = view.getBigUint64(offset, littleEndian);
-    const numBits = view.getUint32(offset + 8);
+    const bitmapBase = sequenceNumberFromData(view, offset, littleEndian);
+    const numBits = view.getUint32(offset + 8, littleEndian);
     const numLongs = Math.floor((numBits + 31) / 32);
     const bitmap = new Uint32Array(MAX_ITEMS);
     for (let i = 0; i < numLongs; i++) {

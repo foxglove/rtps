@@ -1,8 +1,9 @@
 import { Time } from "@foxglove/rostime";
 
 import { ParticipantAttributes } from "../ParticipantAttributes";
-import { guidParts, DiscoveredEndpointData } from "../common";
+import { guidParts } from "../common";
 import { ParametersView } from "../messaging";
+import { EndpointAttributes } from "../routing";
 
 export function parseParticipant(
   params: ParametersView,
@@ -10,6 +11,7 @@ export function parseParticipant(
 ): ParticipantAttributes | undefined {
   const protocolVersion = params.protocolVersion();
   const vendorId = params.vendorId();
+  const domainId = params.domainId() ?? 0;
   const expectsInlineQoS = params.expectsInlineQoS();
   const metatrafficUnicastLocator = params.metatrafficUnicastLocator();
   const metatrafficMulticastLocator = params.metatrafficMulticastLocator();
@@ -47,6 +49,7 @@ export function parseParticipant(
     entityId,
     protocolVersion,
     vendorId,
+    domainId,
     expectsInlineQoS,
     metatrafficUnicastLocatorList,
     metatrafficMulticastLocatorList,
@@ -59,9 +62,13 @@ export function parseParticipant(
 }
 
 export function parseEndpoint(
-  params: ParametersView,
+  params?: ParametersView,
   timestamp?: Time,
-): DiscoveredEndpointData | undefined {
+): EndpointAttributes | undefined {
+  if (params == undefined) {
+    return undefined;
+  }
+
   const topicName = params.topicName();
   const typeName = params.typeName();
   const reliability = params.reliability();

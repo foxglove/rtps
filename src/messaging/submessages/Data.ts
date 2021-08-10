@@ -22,15 +22,18 @@ export const DataPresent = 1 << 2;
 export const Serialized = 1 << 3;
 
 export class DataMsg implements SubMessage {
+  inlineQoS = false;
+  dataPresent: boolean;
+  serialized = false;
+
   constructor(
     public readerEntityId: EntityId,
     public writerEntityId: EntityId,
     public writerSeqNumber: SequenceNumber,
     public serializedData: Uint8Array,
-    public inlineQoS: boolean,
-    public dataPresent: boolean,
-    public serialized: boolean,
-  ) {}
+  ) {
+    this.dataPresent = serializedData.byteLength > 0;
+  }
 
   write(output: DataView, offset: number, littleEndian: boolean): number {
     const payloadLength = this.serializedData.byteLength;

@@ -4,8 +4,8 @@ import { SubMessage } from "./SubMessage";
 export type MessageOptions = {
   guidPrefix: GuidPrefix;
   bigEndian?: boolean;
-  protocolVersion?: ProtocolVersion;
-  vendorId?: VendorId;
+  protocolVersion: ProtocolVersion;
+  vendorId: VendorId;
   maxSize?: number;
 };
 
@@ -19,13 +19,17 @@ export class Message {
     return new Uint8Array(this.buffer, 0, this.offset);
   }
 
+  get size(): number {
+    return this.offset;
+  }
+
   constructor(opts: MessageOptions) {
     this.littleEndian = !(opts.bigEndian === true);
     this.buffer = new ArrayBuffer(opts.maxSize ?? 1500);
     this.view = new DataView(this.buffer);
 
-    const protocolVersion = opts.protocolVersion ?? { major: 2, minor: 1 };
-    const vendorId = opts.vendorId ?? VendorId.EclipseCycloneDDS;
+    const protocolVersion = opts.protocolVersion;
+    const vendorId = opts.vendorId;
 
     this.view.setUint32(0, 0x52545053, false); // RTPS
     this.view.setUint8(4, protocolVersion.major);

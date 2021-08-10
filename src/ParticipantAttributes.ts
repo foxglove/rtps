@@ -15,6 +15,7 @@ export type ParticipantAttributes = {
   entityId: EntityId;
   protocolVersion: ProtocolVersion;
   vendorId: VendorId;
+  domainId: number;
   expectsInlineQoS: boolean;
   metatrafficUnicastLocatorList: Locator[];
   metatrafficMulticastLocatorList: Locator[];

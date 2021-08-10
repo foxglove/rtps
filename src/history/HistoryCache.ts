@@ -11,7 +11,8 @@ export class HistoryCache {
     return this.map_.size;
   }
 
-  add(sequenceNum: SequenceNumber, change: CacheChange): void {
+  add(change: CacheChange): void {
+    const sequenceNum = change.sequenceNumber;
     this.map_.set(sequenceNum, change);
     if (this.min_ == undefined || sequenceNum < this.min_) {
       this.min_ = sequenceNum;
@@ -44,6 +45,10 @@ export class HistoryCache {
 
   getSequenceNumMax(): SequenceNumber | undefined {
     return this.max_;
+  }
+
+  nextSequenceNum(): SequenceNumber {
+    return (this.max_ ?? 0n) + 1n;
   }
 
   getMissingSequenceNums(

@@ -1,4 +1,3 @@
-import { ParticipantView } from "../ParticipantView";
 import { Locator, LocatorKind, ipv6ToBytes, ipv4ToBytes } from "../common";
 import { Message } from "../messaging";
 import { UdpAddress, UdpRemoteInfo, UdpSocket, UdpSocketCreate } from "./networkTypes";
@@ -48,17 +47,17 @@ export function locatorFromUdpAddress(address: UdpAddress): Locator {
   }
 }
 
-export async function sendMessageTo(
+export async function sendMessageToUdp(
   msg: Message,
   srcSocket: UdpSocket,
-  destParticipant: ParticipantView,
+  locators: Locator[],
 ): Promise<void> {
-  const locators = destParticipant.metatrafficUnicastLocatorList;
-  const payload = msg.data;
-  await Promise.all(
-    // eslint-disable-next-line @typescript-eslint/promise-function-async
-    locators.map((locator) => srcSocket.send(payload, locator.port, locator.address)),
-  );
+  for (const locator of locators) {
+    if (locator.kind === LocatorKind.UDPv4) {
+      await srcSocket.send(msg.data, locator.port, locator.address);
+      return;
+    }
+  }
 }
 
 export async function createUdpSocket(
