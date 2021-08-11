@@ -1,3 +1,4 @@
+import { Guid, makeGuid } from "../common";
 import { EndpointAttributes } from "./Endpoint";
 
 export class WriterView {
@@ -7,5 +8,9 @@ export class WriterView {
 
   constructor(attributes: EndpointAttributes) {
     this.attributes = attributes;
+  }
+
+  guid(): Guid {
+    return makeGuid(this.attributes.guidPrefix, this.attributes.entityId);
   }
 }

@@ -16,9 +16,9 @@ export type EndpointAttributes = {
   entityId: EntityId;
   topicName?: string;
   typeName?: string;
-  reliability: ReliabilityAndMaxBlockingTime;
-  history: HistoryAndDepth;
-  protocolVersion: ProtocolVersion;
+  reliability: Readonly<ReliabilityAndMaxBlockingTime>;
+  history: Readonly<HistoryAndDepth>;
+  protocolVersion: Readonly<ProtocolVersion>;
   vendorId: VendorId;
   userData?: string;
 };

@@ -56,9 +56,9 @@ export class HistoryCache {
     lastSeqNumber: SequenceNumber,
   ): SequenceNumberSet {
     if (lastSeqNumber < firstSeqNumber) {
-      // eslint-disable-next-line no-param-reassign
-      firstSeqNumber = lastSeqNumber;
+      return new SequenceNumberSet(lastSeqNumber, 0);
     }
+
     // FIXME: This is not correct. base should be set to the first missing sequence number, or
     // lastSeqNumber + 1. numBits is only non-zero if there are misses
     const numBits = Math.min(1 + Number(lastSeqNumber - firstSeqNumber), 256);

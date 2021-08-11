@@ -80,6 +80,11 @@ export class SequenceNumberSet {
     }
   }
 
+  toString(): string {
+    const missing = Array.from(this.sequenceNumbers());
+    return `base=${this.base}, numBits=${this.numBits}, missing=[${missing.join(",")}]`;
+  }
+
   static fromData(view: DataView, offset: number, littleEndian: boolean): SequenceNumberSet {
     const bitmapBase = sequenceNumberFromData(view, offset, littleEndian);
     const numBits = view.getUint32(offset + 8, littleEndian);

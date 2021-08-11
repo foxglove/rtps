@@ -13,7 +13,7 @@ export type ParticipantAttributes = {
   timestamp?: Time;
   guidPrefix: GuidPrefix;
   entityId: EntityId;
-  protocolVersion: ProtocolVersion;
+  protocolVersion: Readonly<ProtocolVersion>;
   vendorId: VendorId;
   domainId: number;
   expectsInlineQoS: boolean;

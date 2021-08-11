@@ -34,7 +34,7 @@ async function main() {
   });
   console.log(`Discovered participant ${other.guidPrefix}`);
 
-  await participant.advertiseParticipant();
+  await participant.advertiseParticipant(participant.attributes);
 
   // await participant.subscribe({
   //   topicName: "ros_discovery_info",
