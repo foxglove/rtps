@@ -28,6 +28,10 @@ async function main() {
     console.dir(endpoint);
   });
 
+  participant.on("userData", (userData) => {
+    console.dir(userData);
+  });
+
   const other = await new Promise<ParticipantAttributes>((resolve, reject) => {
     participant.once("discoveredParticipant", resolve);
     participant.once("error", reject);

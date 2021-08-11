@@ -10,7 +10,6 @@ describe("Participant", () => {
     const participant = new Participant({
       name: "test",
       addresses: [address],
-      participantId: 1,
       udpSocketCreate: UdpSocketNode.Create,
       // log: console,
     });
