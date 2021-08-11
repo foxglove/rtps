@@ -5,9 +5,6 @@ env:
 ignorePatterns:
   - dist
 
-plugins:
-  - jest
-
 extends:
   - plugin:@foxglove/base
   - plugin:@foxglove/jest
