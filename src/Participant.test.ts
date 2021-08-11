@@ -1,6 +1,6 @@
 import { Participant } from "./Participant";
 import { getNetworkInterfaces, UdpSocketNode } from "./nodejs";
-import { selectIPv4 } from "./selectIP";
+import { selectIPv4 } from "./transport";
 
 jest.setTimeout(1000 * 10);
 
@@ -10,12 +10,11 @@ describe("Participant", () => {
     const participant = new Participant({
       name: "test",
       addresses: [address],
-      participantId: 1,
       udpSocketCreate: UdpSocketNode.Create,
       // log: console,
     });
     await participant.start();
-    expect(participant.defaultUnicastSocket).toBeDefined();
+    expect(participant.unicastSocket).toBeDefined();
     participant.shutdown();
   });
 });

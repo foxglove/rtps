@@ -1,29 +1,61 @@
-import { Participant, selectIPv4, DiscoveredParticipantData } from "../src";
+import {
+  Participant,
+  selectIPv4,
+  Durability,
+  Reliability,
+  HistoryKind,
+  ParticipantAttributes,
+} from "../src";
 import { getNetworkInterfaces, UdpSocketNode } from "../src/nodejs";
+
+const DURATION_INFINITE = { sec: 0x7fffffff, nsec: 0xffffffff };
 
 async function main() {
   const address = selectIPv4(getNetworkInterfaces());
   const participant = new Participant({
     name: "listener",
     addresses: [address],
-    participantId: 1,
     udpSocketCreate: UdpSocketNode.Create,
     log: console,
   });
   await participant.start();
 
-  const other = await new Promise<DiscoveredParticipantData>((resolve, reject) => {
-    participant.once("discoveredParticipant", resolve);
-    participant.once("error", reject);
-  });
-
-  participant.on("discoveredEndpoint", (endpoint) => {
+  participant.on("discoveredPublication", (endpoint) => {
     console.dir(endpoint);
   });
 
-  console.dir(other);
+  participant.on("discoveredSubscription", (endpoint) => {
+    console.dir(endpoint);
+  });
 
-  await participant.sendParticipantData(other.guidPrefix);
+  participant.on("userData", (userData) => {
+    console.dir(userData);
+  });
+
+  const other = await new Promise<ParticipantAttributes>((resolve, reject) => {
+    participant.once("discoveredParticipant", resolve);
+    participant.once("error", reject);
+  });
+  console.log(`Discovered participant ${other.guidPrefix}`);
+
+  await participant.advertiseParticipant(participant.attributes);
+
+  // await participant.subscribe({
+  //   topicName: "ros_discovery_info",
+  //   typeName: "rmw_dds_common::msg::dds_::ParticipantEntitiesInfo_",
+  //   durability: Durability.TransientLocal,
+  //   reliability: { kind: Reliability.Reliable, maxBlockingTime: DURATION_INFINITE },
+  //   history: { kind: History.KeepAll, depth: -1 },
+  // });
+  await participant.subscribe({
+    topicName: "rt/chatter",
+    typeName: "std_msgs::msg::dds_::String_",
+    durability: Durability.TransientLocal,
+    reliability: { kind: Reliability.Reliable, maxBlockingTime: DURATION_INFINITE },
+    history: { kind: HistoryKind.KeepLast, depth: 10 },
+  });
+
+  await participant.sendAlive();
 
   await new Promise((r) => setTimeout(r, 10000));
 
