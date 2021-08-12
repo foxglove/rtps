@@ -47,7 +47,7 @@ async function main() {
   //   reliability: { kind: Reliability.Reliable, maxBlockingTime: DURATION_INFINITE },
   //   history: { kind: History.KeepAll, depth: -1 },
   // });
-  await participant.subscribe({
+  const subscribeId = participant.subscribe({
     topicName: "rt/chatter",
     typeName: "std_msgs::msg::dds_::String_",
     durability: Durability.TransientLocal,
@@ -58,6 +58,8 @@ async function main() {
   await participant.sendAlive();
 
   await new Promise((r) => setTimeout(r, 10000));
+
+  participant.unsubscribe(subscribeId);
 
   participant.shutdown();
 }
