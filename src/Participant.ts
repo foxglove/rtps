@@ -289,7 +289,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     await sendMessageToUdp(msg, this._unicastSocket, locators);
   }
 
-  async subscribe(opts: SubscribeOpts): Promise<void> {
+  subscribe(opts: SubscribeOpts): EntityId {
     const writer = this._writers.get(EntityIdBuiltin.SubscriptionsWriter);
     if (writer == undefined) {
       throw new Error(`Cannot subscribe without SubscriptionsWriter`);
@@ -333,12 +333,70 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       data: parameters.data,
     });
 
-    await this.sendChanges(writer);
+    void this.sendChanges(writer);
+
+    return readerEntityId;
   }
 
-  async unsubscribe(_opts: SubscribeOpts): Promise<void> {
-    // FIXME: Implement unsubscribe
-    throw new Error(`Not implemented`);
+  unsubscribe(readerEntityId: EntityId): boolean {
+    const writer = this._writers.get(EntityIdBuiltin.SubscriptionsWriter);
+    if (writer == undefined) {
+      throw new Error(`cannot unsubscribe without SubscriptionsWriter`);
+    }
+
+    const opts = this._subscriptions.get(readerEntityId);
+    if (opts == undefined) {
+      this._log?.warn?.(`subscription not found for ${readerEntityId}`);
+      return false;
+    }
+
+    const readerGuid = makeGuid(this.attributes.guidPrefix, readerEntityId);
+    this._log?.info?.(`unsubscribing ${readerGuid} from ${opts.topicName} (${opts.typeName})`);
+
+    // Remove the local copy of subscription options so new readers are not created
+    this._subscriptions.delete(readerEntityId);
+
+    // Remove any readers created for this subscription
+    for (const participant of this._participants.values()) {
+      participant.localReaders.delete(readerEntityId);
+      const remoteWriterId = participant.localReaderIdToRemoteWriterId.get(readerEntityId);
+      if (remoteWriterId != undefined) {
+        participant.localReaderIdToRemoteWriterId.delete(readerEntityId);
+        const readerIds = participant.remoteWriterIdToLocalReaderIds.get(remoteWriterId);
+        const newReaderIds = readerIds?.filter((id) => id !== readerEntityId);
+        if (newReaderIds == undefined || newReaderIds.length === 0) {
+          participant.remoteWriterIdToLocalReaderIds.delete(remoteWriterId);
+        } else {
+          participant.remoteWriterIdToLocalReaderIds.set(remoteWriterId, newReaderIds);
+        }
+      }
+    }
+
+    // FIXME: Check what is sent over the wire when unsubscribing
+    // Publish a new entry to the SubscriptionsWriter to mark as disposed
+    // Parameter list
+    // const parameters = new Parameters();
+    // parameters.topicName(opts.topicName);
+    // parameters.typeName(opts.typeName);
+    // parameters.reliability(opts.reliability);
+    // parameters.history(opts.history);
+    // parameters.protocolVersion(this.attributes.protocolVersion);
+    // parameters.vendorId(this.attributes.vendorId);
+    // parameters.endpointGuid(readerGuid);
+    // parameters.adlinkEntityFactory(1);
+    // parameters.finish();
+
+    // writer.history.add({
+    //   timestamp: fromDate(new Date()),
+    //   kind: ChangeKind.NotAliveDisposed,
+    //   writerGuid: makeGuid(this.attributes.guidPrefix, EntityIdBuiltin.SubscriptionsWriter),
+    //   sequenceNumber: writer.history.nextSequenceNum(),
+    //   data: parameters.data,
+    // });
+
+    // void this.sendChanges(writer);
+
+    return true;
   }
 
   async advertiseParticipant(attributes: ParticipantAttributes): Promise<void> {
