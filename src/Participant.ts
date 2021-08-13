@@ -438,6 +438,18 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     await this.sendChanges(writer);
   }
 
+  topicWriters(): EndpointAttributes[] {
+    const endpoints: EndpointAttributes[] = [];
+    for (const participant of this._participants.values()) {
+      for (const writer of participant.remoteWriters.values()) {
+        if (writer.attributes.topicName != undefined) {
+          endpoints.push(writer.attributes);
+        }
+      }
+    }
+    return endpoints;
+  }
+
   private async sendAckNackTo(
     reader: Reader,
     guidPrefix: GuidPrefix,
