@@ -52,9 +52,10 @@ export async function sendMessageToUdp(
   srcSocket: UdpSocket,
   locators: Locator[],
 ): Promise<void> {
+  const data = msg.data;
   for (const locator of locators) {
     if (locator.kind === LocatorKind.UDPv4) {
-      await srcSocket.send(msg.data, locator.port, locator.address);
+      await srcSocket.send(data, 0, data.length, locator.port, locator.address);
       return;
     }
   }

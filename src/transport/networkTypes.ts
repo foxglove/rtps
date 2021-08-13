@@ -41,7 +41,13 @@ export interface UdpSocket {
   close(): Promise<void>;
   dispose(): Promise<void>;
   dropMembership(multicastAddress: string, multicastInterface?: string): Promise<void>;
-  send(data: Uint8Array, port: number, address: string): Promise<void>;
+  send(
+    data: Uint8Array,
+    offset: number,
+    length: number,
+    port: number,
+    address: string,
+  ): Promise<void>;
   setBroadcast(flag: boolean): Promise<void>;
   setMulticastInterface(multicastInterface: string): Promise<void>;
   setMulticastLoopback(flag: boolean): Promise<void>;

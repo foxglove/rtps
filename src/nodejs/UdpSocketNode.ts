@@ -58,9 +58,15 @@ export class UdpSocketNode extends EventEmitter<UdpSocketEvents> implements UdpS
     this._socket.dropMembership(multicastAddress, multicastInterface);
   }
 
-  async send(data: Uint8Array, port: number, address: string): Promise<void> {
+  async send(
+    data: Uint8Array,
+    offset: number,
+    length: number,
+    port: number,
+    address: string,
+  ): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      this._socket.send(data, 0, data.length, port, address, (err) => {
+      this._socket.send(data, offset, length, port, address, (err) => {
         if (err != undefined) {
           reject(err);
           return;
