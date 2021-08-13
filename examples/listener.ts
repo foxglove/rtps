@@ -1,11 +1,4 @@
-import {
-  Participant,
-  selectIPv4,
-  Durability,
-  Reliability,
-  HistoryKind,
-  ParticipantAttributes,
-} from "../src";
+import { Participant, selectIPv4, Durability, Reliability, HistoryKind } from "../src";
 import { getNetworkInterfaces, UdpSocketNode } from "../src/nodejs";
 
 const DURATION_INFINITE = { sec: 0x7fffffff, nsec: 0xffffffff };
@@ -20,6 +13,10 @@ async function main() {
   });
   await participant.start();
 
+  participant.on("discoveredParticipant", (otherParticipant) => {
+    console.dir(otherParticipant);
+  });
+
   participant.on("discoveredPublication", (endpoint) => {
     console.dir(endpoint);
   });
@@ -31,14 +28,6 @@ async function main() {
   participant.on("userData", (userData) => {
     console.dir(userData);
   });
-
-  const other = await new Promise<ParticipantAttributes>((resolve, reject) => {
-    participant.once("discoveredParticipant", resolve);
-    participant.once("error", reject);
-  });
-  console.log(`Discovered participant ${other.guidPrefix}`);
-
-  await participant.advertiseParticipant(participant.attributes);
 
   // await participant.subscribe({
   //   topicName: "ros_discovery_info",
@@ -52,10 +41,8 @@ async function main() {
     typeName: "std_msgs::msg::dds_::String_",
     durability: Durability.TransientLocal,
     reliability: { kind: Reliability.Reliable, maxBlockingTime: DURATION_INFINITE },
-    history: { kind: HistoryKind.KeepLast, depth: 10 },
+    history: { kind: HistoryKind.KeepLast, depth: 1 },
   });
-
-  await participant.sendAlive();
 
   await new Promise((r) => setTimeout(r, 10000));
 

@@ -183,6 +183,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     } else {
       this._log?.warn?.(`Failed to bind UDP socket to ${address}`);
     }
+
+    // Record an advertisement for ourself in the ParticipantWriter history
+    await this.advertiseParticipant(this.attributes);
   }
 
   shutdown(): void {
@@ -190,6 +193,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this._running = false;
     this.removeAllListeners();
     this._participants.clear();
+    this._writers.clear();
+    this._subscriptions.clear();
 
     this._multicastSocket?.close();
     this._unicastSocket?.close();
@@ -734,6 +739,15 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       participant = new ParticipantView(this, participantData);
       this._participants.set(participantData.guidPrefix, participant);
       this.emit("discoveredParticipant", participantData);
+
+      // Send our participant advertisement(s) to this other participant
+      const writer = this._writers.get(EntityIdBuiltin.ParticipantWriter);
+      if (writer != undefined) {
+        const readers = participant.remoteReadersForWriterId(EntityIdBuiltin.ParticipantWriter);
+        for (const reader of readers) {
+          void this.sendChangesTo(reader, writer, participant.attributes.defaultUnicastLocatorList);
+        }
+      }
 
       // Send preemptive heartbeats for participant readers
       void this.sendInitialHeartbeats(participant);
