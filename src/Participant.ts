@@ -800,6 +800,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
+    if (readers.length === 0) {
+      this._log?.warn?.(
+        `Received user data from writer ${uint32ToHex(dataMsg.writerEntityId)} with no readers`,
+      );
+      return;
+    }
+
     for (const reader of readers) {
       this.emit("userData", {
         timestamp,
