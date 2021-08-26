@@ -10,9 +10,11 @@ import {
 } from "../../common";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
-import { Final } from "./AckNack";
 
-export const Liveliness = 1 << 2;
+export enum HeartbeatFlags {
+  Final = 1 << 1,
+  Liveliness = 1 << 2,
+}
 
 export class Heartbeat implements SubMessage {
   constructor(
@@ -21,14 +23,11 @@ export class Heartbeat implements SubMessage {
     public firstAvailableSeqNumber: SequenceNumber,
     public lastSeqNumber: SequenceNumber,
     public count: number,
-    public final: boolean,
-    public liveliness: boolean,
+    public flags: HeartbeatFlags,
   ) {}
 
   write(output: DataView, offset: number, littleEndian: boolean): number {
-    let flags = littleEndian ? LittleEndian : 0;
-    flags |= this.final ? Final : 0;
-    flags |= this.liveliness ? Liveliness : 0;
+    const flags = (littleEndian ? LittleEndian : 0) | this.flags;
     output.setUint8(offset, SubMessageId.HEARTBEAT);
     output.setUint8(offset + 1, flags); // flags
     output.setUint16(offset + 2, 28, littleEndian); // octetsToNextHeader
@@ -43,11 +42,14 @@ export class Heartbeat implements SubMessage {
 
 export class HeartbeatView extends SubMessageView {
   get final(): boolean {
-    return (this.view.getUint8(this.offset + 1) & Final) === Final;
+    return (this.view.getUint8(this.offset + 1) & HeartbeatFlags.Final) === HeartbeatFlags.Final;
   }
 
   get liveliness(): boolean {
-    return (this.view.getUint8(this.offset + 1) & Liveliness) === Liveliness;
+    return (
+      (this.view.getUint8(this.offset + 1) & HeartbeatFlags.Liveliness) ===
+      HeartbeatFlags.Liveliness
+    );
   }
 
   get readerEntityId(): EntityId {

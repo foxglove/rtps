@@ -12,6 +12,7 @@ import { SubMessageView } from "./SubMessageView";
 import {
   AckNackView,
   DataMsgView,
+  GapView,
   HeartbeatView,
   InfoDstView,
   InfoTsView,
@@ -101,8 +102,7 @@ function getSubMessageView(
     case SubMessageId.HEARTBEAT:
       return new HeartbeatView(data, view, offset, guidPrefix);
     case SubMessageId.GAP:
-      // return new GapView(data, view, offset);
-      return new SubMessageView(data, view, offset);
+      return new GapView(data, view, offset);
     case SubMessageId.INFO_TS:
       return new InfoTsView(data, view, offset);
     case SubMessageId.INFO_DST:

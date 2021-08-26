@@ -20,7 +20,7 @@ const BUILTIN_RELIABILITY: ReliabilityAndMaxBlockingTime = {
   kind: Reliability.Reliable,
   maxBlockingTime: fromMillis(100),
 };
-const BUILTIN_HISTORY: HistoryAndDepth = { kind: HistoryKind.KeepLast, depth: 0 };
+const BUILTIN_HISTORY: HistoryAndDepth = { kind: HistoryKind.KeepLast, depth: 1 };
 
 export class ParticipantView {
   readonly attributes: ParticipantAttributes;
