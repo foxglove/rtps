@@ -1,2 +1,3 @@
 export * from "./CacheChange";
-export * from "./HistoryCache";
+export * from "./ReaderHistoryCache";
+export * from "./WriterHistoryCache";

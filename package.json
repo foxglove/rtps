@@ -71,6 +71,7 @@
   "dependencies": {
     "@foxglove/cdr": "^1.1.1",
     "@foxglove/rostime": "^1.1.0",
+    "avl": "^1.5.2",
     "eventemitter3": "^4.0.7"
   }
 }

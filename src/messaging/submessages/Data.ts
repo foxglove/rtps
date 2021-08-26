@@ -12,37 +12,33 @@ import {
   SequenceNumber,
   sequenceNumberFromData,
   sequenceNumberToData,
+  EntityIdBuiltin,
+  guidPrefixFromCDR,
 } from "../../common";
 import { ParametersView } from "../ParametersView";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
 
-export const InlineQoS = 1 << 1;
-export const DataPresent = 1 << 2;
-export const Serialized = 1 << 3;
+export enum DataFlags {
+  InlineQoS = 1 << 1,
+  DataPresent = 1 << 2,
+  SerializedKey = 1 << 3,
+}
 
 export class DataMsg implements SubMessage {
-  inlineQoS = false;
-  dataPresent: boolean;
-  serialized = false;
-
   constructor(
     public readerEntityId: EntityId,
     public writerEntityId: EntityId,
     public writerSeqNumber: SequenceNumber,
     public serializedData: Uint8Array,
-  ) {
-    this.dataPresent = serializedData.byteLength > 0;
-  }
+    public flags: DataFlags,
+  ) {}
 
   write(output: DataView, offset: number, littleEndian: boolean): number {
     const payloadLength = this.serializedData.byteLength;
     const payloadOffset = output.byteOffset + offset + 24;
 
-    let flags = littleEndian ? LittleEndian : 0;
-    flags |= this.inlineQoS ? InlineQoS : 0;
-    flags |= this.dataPresent ? DataPresent : 0;
-    flags |= this.serialized ? Serialized : 0;
+    const flags = (littleEndian ? LittleEndian : 0) | this.flags;
     output.setUint8(offset, SubMessageId.DATA);
     output.setUint8(offset + 1, flags); // flags
     output.setUint16(offset + 2, 20 + payloadLength, littleEndian); // octetsToNextHeader
@@ -111,5 +107,14 @@ export class DataMsgView extends SubMessageView {
     }
     const reader = new CdrReader(this.serializedData);
     return new ParametersView(reader);
+  }
+
+  participantMessageData(): GuidPrefix | undefined {
+    if (this.writerEntityId !== EntityIdBuiltin.ParticipantMessageWriter) {
+      return undefined;
+    }
+
+    const reader = new CdrReader(this.serializedData);
+    return guidPrefixFromCDR(reader);
   }
 }

@@ -9,7 +9,9 @@ import {
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
 
-export const Final = 1 << 1;
+export enum AckNackFlags {
+  Final = 1 << 1,
+}
 
 export class AckNack implements SubMessage {
   constructor(
@@ -17,12 +19,11 @@ export class AckNack implements SubMessage {
     public writerEntityId: EntityId,
     public readerSNState: SequenceNumberSet,
     public count: number,
-    public final: boolean,
+    public flags: AckNackFlags,
   ) {}
 
   write(output: DataView, offset: number, littleEndian: boolean): number {
-    let flags = littleEndian ? LittleEndian : 0;
-    flags |= this.final ? Final : 0;
+    const flags = (littleEndian ? LittleEndian : 0) | this.flags;
     const sequenceSetSize = this.readerSNState.size;
     output.setUint8(offset, SubMessageId.ACKNACK);
     output.setUint8(offset + 1, flags); // flags
@@ -37,7 +38,7 @@ export class AckNack implements SubMessage {
 
 export class AckNackView extends SubMessageView {
   get final(): boolean {
-    return (this.view.getUint8(this.offset + 1) & Final) === Final;
+    return (this.view.getUint8(this.offset + 1) & AckNackFlags.Final) === AckNackFlags.Final;
   }
 
   get readerEntityId(): EntityId {

@@ -29,13 +29,6 @@ async function main() {
     console.dir(userData);
   });
 
-  // await participant.subscribe({
-  //   topicName: "ros_discovery_info",
-  //   typeName: "rmw_dds_common::msg::dds_::ParticipantEntitiesInfo_",
-  //   durability: Durability.TransientLocal,
-  //   reliability: { kind: Reliability.Reliable, maxBlockingTime: DURATION_INFINITE },
-  //   history: { kind: History.KeepAll, depth: -1 },
-  // });
   const subscribeId = participant.subscribe({
     topicName: "rt/chatter",
     typeName: "std_msgs::msg::dds_::String_",
@@ -47,6 +40,8 @@ async function main() {
   await new Promise((r) => setTimeout(r, 10000));
 
   participant.unsubscribe(subscribeId);
+
+  await new Promise((r) => setTimeout(r, 5000));
 
   participant.shutdown();
 }

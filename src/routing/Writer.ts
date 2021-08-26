@@ -1,11 +1,12 @@
-import { HistoryCache } from "../history";
-import { Endpoint, EndpointAttributes } from "./Endpoint";
+import { WriterHistoryCache } from "../history";
+import { EndpointAttributes } from "./Endpoint";
 
-export class Writer implements Endpoint {
+export class Writer {
   readonly attributes: Readonly<EndpointAttributes>;
-  history = new HistoryCache();
+  history: WriterHistoryCache;
 
   constructor(attributes: EndpointAttributes) {
     this.attributes = attributes;
+    this.history = new WriterHistoryCache(attributes);
   }
 }

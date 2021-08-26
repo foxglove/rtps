@@ -8,7 +8,6 @@ import {
   ReliabilityAndMaxBlockingTime,
   VendorId,
 } from "../common";
-import { HistoryCache } from "../history";
 
 export type EndpointAttributes = {
   timestamp?: Time;
@@ -22,8 +21,3 @@ export type EndpointAttributes = {
   vendorId: VendorId;
   userData?: string;
 };
-
-export interface Endpoint {
-  attributes: EndpointAttributes;
-  history: HistoryCache;
-}

@@ -1,5 +1,6 @@
 export * from "./AckNack";
 export * from "./Data";
+export * from "./Gap";
 export * from "./Heartbeat";
 export * from "./InfoDst";
 export * from "./InfoTs";
