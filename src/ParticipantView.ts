@@ -30,7 +30,6 @@ export class ParticipantView {
 
   readonly localReaderIdToRemoteWriterId = new Map<EntityId, EntityId>();
   readonly localWriterIdToRemoteReaderIds = new Map<EntityId, EntityId[]>();
-  readonly remoteReaderIdToLocalWriterId = new Map<EntityId, EntityId>();
   readonly remoteWriterIdToLocalReaderIds = new Map<EntityId, EntityId[]>();
 
   constructor(local: Participant, remote: ParticipantAttributes) {
@@ -137,7 +136,6 @@ export class ParticipantView {
 
       // Is there a local writer that matches this remote reader?
       if (hasBuiltinEndpoint(local.attributes.availableBuiltinEndpoints, writerFlag)) {
-        this.remoteReaderIdToLocalWriterId.set(readerEntityId, writerEntityId);
         addToMultiMap(writerEntityId, readerEntityId, this.localWriterIdToRemoteReaderIds);
       }
     }

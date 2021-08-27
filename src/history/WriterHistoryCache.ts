@@ -1,6 +1,6 @@
 import AVLTree from "avl";
 
-import { ChangeKind, HistoryAndDepth, HistoryKind, SequenceNumber } from "../common";
+import { ChangeKind, Guid, HistoryAndDepth, HistoryKind, SequenceNumber } from "../common";
 import { CacheChange, EMPTY_DATA } from "./CacheChange";
 
 const comparator = (a: SequenceNumber, b: SequenceNumber) => Number(a - b);
@@ -8,7 +8,7 @@ const comparator = (a: SequenceNumber, b: SequenceNumber) => Number(a - b);
 export class WriterHistoryCache {
   readonly depth: number;
 
-  private _handleToEntries = new Map<string, AVLTree<SequenceNumber, CacheChange>>();
+  private _handleToEntries = new Map<Guid, AVLTree<SequenceNumber, CacheChange>>();
   private _sequenceToEntry = new AVLTree<SequenceNumber, CacheChange>(comparator);
 
   constructor(opts: { history: HistoryAndDepth }) {
@@ -23,30 +23,28 @@ export class WriterHistoryCache {
   }
 
   set(change: CacheChange): void {
-    if (change.kind === ChangeKind.Alive) {
-      // Update _handleToEntries
-      const handle = change.instanceHandle ?? "";
-      let changes = this._handleToEntries.get(handle);
-      if (changes == undefined) {
-        changes = new AVLTree(comparator);
-        this._handleToEntries.set(handle, changes);
-      }
-      changes.insert(change.sequenceNumber, change);
+    // Update _handleToEntries
+    const handle = change.instanceHandle ?? "";
+    let changes = this._handleToEntries.get(handle);
+    if (changes == undefined) {
+      changes = new AVLTree(comparator);
+      this._handleToEntries.set(handle, changes);
+    }
+    changes.insert(change.sequenceNumber, change);
 
-      // Prune excess entries for this instanceHandle
-      while (changes.size > this.depth) {
-        const removedChange = changes.pop()?.data;
-        if (removedChange != undefined) {
-          // This CacheChange still exists in _sequenceToEntry, so mark it as disposed
-          removedChange.kind = ChangeKind.NotAliveDisposed | ChangeKind.NotAliveUnregistered;
-          removedChange.data = EMPTY_DATA;
-          removedChange.instanceHandle = undefined;
-        }
+    // Prune excess entries for this instanceHandle
+    while (changes.size > this.depth) {
+      const removedChange = changes.pop()?.data;
+      if (removedChange != undefined) {
+        // This CacheChange still exists in _sequenceToEntry, so mark it as disposed
+        removedChange.kind = ChangeKind.NotAliveDisposed | ChangeKind.NotAliveUnregistered;
+        removedChange.data = EMPTY_DATA;
+        removedChange.instanceHandle = undefined;
       }
+    }
 
-      if (changes.size === 0) {
-        this._handleToEntries.delete(handle);
-      }
+    if (changes.size === 0) {
+      this._handleToEntries.delete(handle);
     }
 
     // Update _sequenceToEntry
@@ -55,6 +53,10 @@ export class WriterHistoryCache {
 
   get(sequenceNumber: SequenceNumber): CacheChange | undefined {
     return this._sequenceToEntry.find(sequenceNumber)?.data;
+  }
+
+  getByHandle(handle: Guid): CacheChange | undefined {
+    return this._handleToEntries.get(handle)?.maxNode()?.data;
   }
 
   getSequenceNumMin(): SequenceNumber | undefined {
