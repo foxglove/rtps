@@ -24,7 +24,7 @@ export function guidFromCDR(reader: CdrReader): Guid {
 
 export function writeGuid(guid: Guid, output: DataView, offset: number): void {
   if (guid.length !== 32) {
-    throw new Error(`Invalid GUID "${guid}"`);
+    throw new Error(`invalid GUID "${guid}"`);
   }
 
   const guidPrefix = guid.slice(0, 24);
@@ -35,7 +35,7 @@ export function writeGuid(guid: Guid, output: DataView, offset: number): void {
 
 export function writeGuidToCDR(guid: Guid, output: CdrWriter): void {
   if (guid.length !== 32) {
-    throw new Error(`Invalid GUID "${guid}"`);
+    throw new Error(`invalid GUID "${guid}"`);
   }
 
   const guidPrefix = guid.slice(0, 24);
@@ -46,7 +46,7 @@ export function writeGuidToCDR(guid: Guid, output: CdrWriter): void {
 
 export function guidParts(guid: Guid): [guidPrefix: GuidPrefix, entityId: EntityId] {
   if (guid.length !== 32) {
-    throw new Error(`Invalid GUID "${guid}"`);
+    throw new Error(`invalid GUID "${guid}"`);
   }
 
   const guidPrefix = guid.slice(0, 24);

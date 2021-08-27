@@ -29,14 +29,14 @@ export class MessageView {
 
     // Min length of a message is 20 bytes
     if (data.length < 20) {
-      throw new Error(`Invalid RTPS message, expected 20+ bytes but got ${data.length}`);
+      throw new Error(`invalid RTPS message, expected 20+ bytes but got ${data.length}`);
     }
 
     // Check if the message starts with "RTPS"
     const magic = this.view.getUint32(0, false);
     if (magic !== 0x52545053) {
       const badMagic = toHex(this.data.slice(0, 4));
-      throw new Error(`Invalid magic bytes, expected RTPS but got "${badMagic}"`);
+      throw new Error(`invalid magic bytes, expected RTPS but got "${badMagic}"`);
     }
   }
 

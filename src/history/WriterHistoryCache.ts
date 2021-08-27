@@ -23,6 +23,10 @@ export class WriterHistoryCache {
   }
 
   set(change: CacheChange): void {
+    if (isGap(change)) {
+      throw new Error(`cannot write GAPs to WriterHistoryCache`);
+    }
+
     // Update _handleToEntries
     const handle = change.instanceHandle ?? "";
     let changes = this._handleToEntries.get(handle);
@@ -49,6 +53,8 @@ export class WriterHistoryCache {
 
     // Update _sequenceToEntry
     this._sequenceToEntry.insert(change.sequenceNumber, change);
+
+    this.trim();
   }
 
   get(sequenceNumber: SequenceNumber): CacheChange | undefined {
@@ -76,12 +82,16 @@ export class WriterHistoryCache {
     return (this.getSequenceNumMax() ?? 0n) + 1n;
   }
 
-  trim(): void {
+  private trim(): void {
     // Trim disposed entries from the beginning of _sequenceToEntry
     let front = this._sequenceToEntry.minNode()?.data;
-    while (front != undefined && front.kind !== ChangeKind.Alive) {
+    while (front != undefined && isGap(front)) {
       this._sequenceToEntry.pop();
       front = this._sequenceToEntry.minNode()?.data;
     }
   }
+}
+
+function isGap(change: CacheChange): boolean {
+  return change.kind !== ChangeKind.Alive && change.data.length === 0;
 }

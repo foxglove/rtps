@@ -43,7 +43,7 @@ export function locatorFromUdpAddress(address: UdpAddress): Locator {
     const addressData = ipv4ToBytes(address.address);
     return new Locator(LocatorKind.UDPv4, address.port, addressData);
   } else {
-    throw new Error(`Unrecognized UDP address family "${address.family}"`);
+    throw new Error(`unrecognized UDP address family "${address.family}"`);
   }
 }
 
