@@ -9,6 +9,7 @@ import {
   EntityId,
   EntityIdBuiltin,
   EntityKind,
+  fromHex,
   generateGuidPrefix,
   Guid,
   guidParts,
@@ -21,7 +22,6 @@ import {
   makeGuid,
   ProtocolVersion,
   Reliability,
-  SequenceNumber,
   SequenceNumberSet,
   SubMessageId,
   uint32ToHex,
@@ -62,6 +62,8 @@ import {
   createUdpSocket,
   discoveryMulticastPort,
   locatorForSocket,
+  locatorFromUdpAddress,
+  MULTICAST_IPv4,
   sendMessageToUdp,
   UdpRemoteInfo,
   UdpSocket,
@@ -99,6 +101,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   private _running = true;
   private _unicastSocket?: UdpSocket;
   private _multicastSocket?: UdpSocket;
+  private _multicastLocator: Locator;
   private nextEndpointId = 1;
   private _receivedBytes = 0;
 
@@ -146,9 +149,18 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       leaseDuration: { sec: 10, nsec: 0 },
     };
 
+    if (fromHex(this.attributes.guidPrefix).length !== 12) {
+      throw new Error(`Invalid guidPrefix "${this.attributes.guidPrefix}", must be 12 byte hex`);
+    }
+
     this._addresses = options.addresses;
     this._udpSocketCreate = options.udpSocketCreate;
     this._log = options.log;
+    this._multicastLocator = locatorFromUdpAddress({
+      address: MULTICAST_IPv4,
+      family: "IPv4",
+      port: discoveryMulticastPort(this.attributes.domainId),
+    });
 
     const endpoints = this.attributes.availableBuiltinEndpoints;
     this.addBuiltinWriter(endpoints, BuiltinEndpointSet.ParticipantAnnouncer, EntityIdBuiltin.ParticipantWriter); // prettier-ignore
@@ -160,7 +172,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   async start(): Promise<void> {
     // TODO: Listen on all interfaces
     const address = this._addresses[0]!;
-    this._log?.debug?.(`Starting participant ${this.name} on ${address}`);
+    this._log?.debug?.(`starting participant ${this.name} on ${address}`);
 
     // Create the multicast UDP socket for discovering other participants and advertising ourself
     this._multicastSocket = await createMulticastUdpSocket(
@@ -171,9 +183,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     );
     const multiAddr = await this._multicastSocket.localAddress();
     if (multiAddr != undefined) {
-      this._log?.debug?.(`Listening on UDP multicast ${multiAddr?.address}:${multiAddr?.port}`);
+      this._log?.debug?.(`listening on UDP multicast ${multiAddr?.address}:${multiAddr?.port}`);
     } else {
-      this._log?.warn?.(`Failed to bind UDP multicast socket to ${address}`);
+      this._log?.warn?.(`failed to bind UDP multicast socket to ${address}`);
     }
 
     // Create the unicast UDP socket for sending and receiving directly to participants
@@ -185,15 +197,18 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     );
     const locator = await locatorForSocket(this._unicastSocket);
     if (locator != undefined) {
-      this._log?.debug?.(`Listening on UDP ${locator.address}:${locator.port}`);
+      this._log?.debug?.(`listening on UDP ${locator.address}:${locator.port}`);
       this.attributes.defaultUnicastLocatorList = [locator];
       this.attributes.metatrafficUnicastLocatorList = [locator];
     } else {
-      this._log?.warn?.(`Failed to bind UDP socket to ${address}`);
+      this._log?.warn?.(`failed to bind UDP socket to ${address}`);
     }
 
     // Record an advertisement for ourself in the ParticipantWriter history
     await this.advertiseParticipant(this.attributes);
+
+    // Send our participant advertisement to multicast
+    await this.broadcastParticipant(this.attributes);
   }
 
   shutdown(): void {
@@ -253,7 +268,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   async sendChangesTo(reader: ReaderView, writer: Writer, locators: Locator[]): Promise<void> {
-    if (this._unicastSocket == undefined) {
+    const srcSocket = this._unicastSocket;
+    if (srcSocket == undefined) {
       return;
     }
 
@@ -284,18 +300,16 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const readerEntityId = reader.attributes.entityId;
     const writerEntityId = writer.attributes.entityId;
 
-    const gaps: SequenceNumber[] = [];
-
     // Append DATA messages
     let curTime: Time = { sec: -1, nsec: 0 };
     for (const change of changes) {
-      if (change.kind === ChangeKind.Alive || change.data.length > 0) {
-        // Write an INFO_TS (timestamp) submessage if necessary
-        if (!areEqual(curTime, change.timestamp)) {
-          msg.writeSubmessage(new InfoTs(change.timestamp));
-          curTime = change.timestamp;
-        }
+      // Write an INFO_TS (timestamp) submessage if necessary
+      if (!areEqual(curTime, change.timestamp)) {
+        msg.writeSubmessage(new InfoTs(change.timestamp));
+        curTime = change.timestamp;
+      }
 
+      if (change.kind === ChangeKind.Alive || change.data.length > 0) {
         // Write this DATA submessage
         msg.writeSubmessage(
           new DataMsg(
@@ -309,36 +323,16 @@ export class Participant extends EventEmitter<ParticipantEvents> {
           ),
         );
       } else {
-        gaps.push(change.sequenceNumber);
+        // Write a GAP submessage
+        msg.writeSubmessage(
+          new Gap(
+            readerEntityId,
+            writerEntityId,
+            change.sequenceNumber,
+            new SequenceNumberSet(change.sequenceNumber + 1n, 0),
+          ),
+        );
       }
-    }
-
-    // Append a GAP message if necessary
-    if (gaps.length > 0) {
-      const gapStart = gaps.shift()!;
-      let base = gapStart + 1n;
-      while (gaps.length > 0) {
-        if (gaps[0] !== base) {
-          break;
-        }
-
-        gaps.shift();
-        ++base;
-      }
-
-      let gapList: SequenceNumberSet;
-      if (gaps.length > 0) {
-        const last = gaps[gaps.length - 1]!;
-        const numBits = Math.min(1 + Number(last - base), 256);
-        gapList = new SequenceNumberSet(base, numBits);
-        for (const gap of gaps) {
-          gapList.add(gap);
-        }
-      } else {
-        gapList = new SequenceNumberSet(base, 0);
-      }
-
-      msg.writeSubmessage(new Gap(readerEntityId, writerEntityId, gapStart, gapList));
     }
 
     // Append a HEARTBEAT message
@@ -356,7 +350,12 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     );
 
     // Send this message as a UDP packet
-    await sendMessageToUdp(msg, this._unicastSocket, locators);
+    this._log?.debug?.(
+      `sending ${changes.length} change(s) (${msg.size} bytes), reader=${uint32ToHex(
+        readerEntityId,
+      )}, writer=${uint32ToHex(writerEntityId)}`,
+    );
+    await sendMessageToUdp(msg, srcSocket, locators);
   }
 
   subscribe(opts: SubscribeOpts): EntityId {
@@ -371,7 +370,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const readerGuid = makeGuid(this.attributes.guidPrefix, readerEntityId);
 
     this._log?.info?.(
-      `Creating subscription ${readerGuid} for ${opts.topicName} (${opts.typeName})`,
+      `creating subscription ${readerGuid} for ${opts.topicName} (${opts.typeName})`,
     );
     this._subscriptions.set(readerEntityId, opts);
 
@@ -514,7 +513,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       parameters.defaultUnicastLocator(locator);
     }
     for (const locator of attributes.metatrafficUnicastLocatorList) {
-      parameters.defaultUnicastLocator(locator);
+      parameters.metatrafficUnicastLocator(locator);
     }
     parameters.finish();
 
@@ -528,6 +527,42 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     });
 
     await this.sendChanges(writer);
+  }
+
+  async broadcastParticipant(attributes: ParticipantAttributes): Promise<void> {
+    const srcSocket = this._multicastSocket;
+    if (srcSocket == undefined) {
+      return;
+    }
+
+    const writer = this._writers.get(EntityIdBuiltin.ParticipantWriter);
+    if (writer == undefined) {
+      return;
+    }
+
+    const participantGuid = makeGuid(attributes.guidPrefix, EntityIdBuiltin.Participant);
+    const change = writer.history.getByHandle(participantGuid);
+    if (change == undefined || change.kind !== ChangeKind.Alive) {
+      this._log?.warn?.(
+        `cannot broadcast participant ${attributes.guidPrefix}, not found in ParticipantWriter history`,
+      );
+      return;
+    }
+
+    const msg = new Message(this.attributes);
+    msg.writeSubmessage(new InfoTs(change.timestamp));
+    msg.writeSubmessage(
+      new DataMsg(
+        EntityIdBuiltin.Unknown,
+        EntityIdBuiltin.ParticipantWriter,
+        change.sequenceNumber,
+        change.data,
+        DataFlags.DataPresent,
+      ),
+    );
+
+    this._log?.debug?.(`broadcasting participant ${attributes.guidPrefix} to multicast`);
+    await sendMessageToUdp(msg, srcSocket, [this._multicastLocator]);
   }
 
   topicWriters(): EndpointAttributes[] {
@@ -564,10 +599,6 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
-    this._log?.debug?.(
-      `ACKNACK to ${makeGuid(guidPrefix, writerEntityId)}, ${sequenceNumSet.toString()}`,
-    );
-
     // RTPS message
     const msg = new Message(this.attributes);
     msg.writeSubmessage(new InfoDst(guidPrefix));
@@ -581,6 +612,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       ),
     );
 
+    this._log?.debug?.(
+      `sending ACKNACK to ${makeGuid(guidPrefix, writerEntityId)}, ${sequenceNumSet.toString()}`,
+    );
     await sendMessageToUdp(msg, srcSocket, locators);
   }
 
@@ -627,16 +661,21 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   };
 
   private handleUdpMessage = (data: Uint8Array, rinfo: UdpRemoteInfo): void => {
-    this._log?.debug?.(`Received ${data.length} byte message from ${rinfo.address}:${rinfo.port}`);
-    this._receivedBytes += data.length;
-
     const message = new MessageView(data);
     const version = message.protocolVersion;
     if (version.major !== 2) {
       const { major, minor } = version;
-      this._log?.debug?.(`Received message with unsupported protocol ${major}.${minor}`);
+      this._log?.debug?.(`received message with unsupported protocol ${major}.${minor}`);
       return;
     }
+
+    if (message.guidPrefix === this.attributes.guidPrefix) {
+      // This is our own message
+      return;
+    }
+
+    this._log?.debug?.(`received ${data.length} byte message from ${rinfo.address}:${rinfo.port}`);
+    this._receivedBytes += data.length;
 
     const subMessages = message.subMessages();
     for (const msg of subMessages) {
@@ -674,7 +713,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     const participant = this._participants.get(guidPrefix);
     if (participant == undefined) {
-      this._log?.warn?.(`Received heartbeat from unknown participant ${guidPrefix}`);
+      this._log?.warn?.(`received heartbeat from unknown participant ${guidPrefix}`);
       return;
     }
 
@@ -688,7 +727,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const readers = this.getReaders(heartbeat.readerEntityId, writerGuid);
     if (readers.length === 0) {
       this._log?.warn?.(
-        `Received unrecognized heartbeat reader=${heartbeat.readerEntityId}, writer=${writerGuid}`,
+        `received unrecognized heartbeat reader=${heartbeat.readerEntityId}, writer=${writerGuid}`,
       );
       return;
     }
@@ -758,13 +797,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     const participant = this._participants.get(guidPrefix);
     if (participant == undefined) {
-      this._log?.warn?.(`Received acknack from unknown participant ${guidPrefix}`);
+      this._log?.warn?.(`received acknack from unknown participant ${guidPrefix}`);
       return;
     }
 
     const readerView = participant.remoteReaders.get(ackNack.readerEntityId);
     if (readerView == undefined) {
-      this._log?.warn?.(`Received acknack for unknown reader ${ackNack.readerEntityId}`);
+      this._log?.warn?.(`received acknack for unknown reader ${ackNack.readerEntityId}`);
       return;
     }
 
@@ -772,7 +811,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     const writer = this._writers.get(ackNack.writerEntityId);
     if (writer == undefined) {
-      this._log?.warn?.(`Received acknack for unknown writer ${ackNack.writerEntityId}`);
+      this._log?.warn?.(`received acknack for unknown writer ${ackNack.writerEntityId}`);
       return;
     }
 
@@ -810,10 +849,10 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         instanceHandle = this.handleParticipantMessage(guidPrefix, dataMsg, timestamp);
         break;
       case EntityIdBuiltin.TypeLookupRequestWriter:
-        this._log?.warn?.(`Received type lookup request from ${guidPrefix}`);
+        this._log?.warn?.(`received type lookup request from ${guidPrefix}`);
         break;
       case EntityIdBuiltin.TypeLookupReplyWriter:
-        this._log?.warn?.(`Received type lookup reply from ${guidPrefix}`);
+        this._log?.warn?.(`received type lookup reply from ${guidPrefix}`);
         break;
       default:
         instanceHandle = this.handleUserData(guidPrefix, dataMsg, timestamp, readers);
@@ -840,6 +879,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     }
 
     const msg = new Message(this.attributes);
+    msg.writeSubmessage(new InfoDst(participant.attributes.guidPrefix));
 
     for (const writer of this._writers.values()) {
       const readers = participant.remoteReadersForWriterId(writer.attributes.entityId);
@@ -862,7 +902,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     // Send this message as a UDP packet
     this._log?.debug?.(
-      `Sending ${msg.size} byte initial heartbeat message to ${participant.attributes.guidPrefix}`,
+      `sending ${msg.size} byte initial heartbeat message to ${participant.attributes.guidPrefix}`,
     );
     await sendMessageToUdp(msg, srcSocket, participant.attributes.metatrafficUnicastLocatorList);
   }
@@ -874,13 +914,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   ): Guid | undefined => {
     const params = dataMsg.parameters();
     if (params == undefined) {
-      this._log?.warn?.(`Ignoring participant message with no parameters from ${senderGuidPrefix}`);
+      this._log?.warn?.(`ignoring participant message with no parameters from ${senderGuidPrefix}`);
       return undefined;
     }
 
     const participantData = parseParticipant(params, timestamp);
     if (participantData == undefined) {
-      this._log?.warn?.(`Failed to parse participant data from ${senderGuidPrefix}`);
+      this._log?.warn?.(`failed to parse participant data from ${senderGuidPrefix}`);
       return undefined;
     }
 
@@ -889,7 +929,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     let participant = this._participants.get(guidPrefix);
     if (participant == undefined) {
-      this._log?.info?.(`Tracking participant ${guidPrefix}`);
+      this._log?.info?.(`tracking participant ${guidPrefix}`);
       participant = new ParticipantView(this, participantData);
       this._participants.set(guidPrefix, participant);
       this.emit("discoveredParticipant", participantData);
@@ -906,7 +946,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       // Send preemptive heartbeats for participant readers
       void this.sendInitialHeartbeats(participant);
     } else {
-      this._log?.info?.(`Updating participant ${guidPrefix}`);
+      this._log?.info?.(`updating participant ${guidPrefix}`);
       participant.update(participantData);
     }
 
@@ -920,14 +960,14 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   ): Guid | undefined => {
     const guidPrefix = dataMsg.participantMessageData();
     if (guidPrefix == undefined) {
-      this._log?.warn?.(`Failed to parse participant message data from ${senderGuidPrefix}`);
+      this._log?.warn?.(`failed to parse participant message data from ${senderGuidPrefix}`);
       return undefined;
     }
 
     const guid = makeGuid(guidPrefix, EntityIdBuiltin.Participant);
 
     this._log?.debug?.(
-      `Received participant message from ${makeGuid(
+      `received participant message from ${makeGuid(
         senderGuidPrefix,
         dataMsg.writerEntityId,
       )} for ${guid}`,
@@ -946,21 +986,21 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   ): undefined => {
     const participant = this._participants.get(senderGuidPrefix);
     if (participant == undefined) {
-      this._log?.warn?.(`Received user data from unknown participant ${senderGuidPrefix}`);
+      this._log?.warn?.(`received user data from unknown participant ${senderGuidPrefix}`);
       return undefined;
     }
 
     const writerView = participant.remoteWriters.get(dataMsg.writerEntityId);
     if (writerView == undefined) {
       this._log?.warn?.(
-        `Received user data from unknown writer ${uint32ToHex(dataMsg.writerEntityId)}`,
+        `received user data from unknown writer ${uint32ToHex(dataMsg.writerEntityId)}`,
       );
       return undefined;
     }
 
     if (readers.length === 0) {
       this._log?.warn?.(
-        `Received user data from writer ${uint32ToHex(dataMsg.writerEntityId)} with no readers`,
+        `received user data from writer ${uint32ToHex(dataMsg.writerEntityId)} with no readers`,
       );
       return undefined;
     }
@@ -985,7 +1025,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const attributes = parseEndpoint(dataMsg.parameters(), timestamp);
     if (attributes == undefined) {
       this._log?.warn?.(
-        `Failed to parse publication attributes from ${dataMsg.serializedData.length} byte DATA`,
+        `failed to parse publication attributes from ${dataMsg.serializedData.length} byte DATA`,
       );
       return undefined;
     }
@@ -996,13 +1036,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     const participant = this._participants.get(attributes.guidPrefix);
     if (participant == undefined) {
-      this._log?.warn?.(`Received publication from unknown participant ${attributes.guidPrefix}`);
+      this._log?.warn?.(`received publication from unknown participant ${attributes.guidPrefix}`);
       return guid;
     }
 
     if (!participant.remoteWriters.has(writerEntityId)) {
       this._log?.info?.(
-        `Tracking publication ${attributes.topicName} (${attributes.typeName}) (${guid})`,
+        `tracking publication ${attributes.topicName} (${attributes.typeName}) (${guid})`,
       );
     }
 
@@ -1030,7 +1070,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   ): Guid | undefined => {
     const attributes = parseEndpoint(dataMsg.parameters(), timestamp);
     if (attributes == undefined) {
-      this._log?.warn?.(`Failed to parse subscription attributes from ${dataMsg.offset} byte DATA`);
+      this._log?.warn?.(`failed to parse subscription attributes from ${dataMsg.offset} byte DATA`);
       return undefined;
     }
 
@@ -1039,13 +1079,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     const participant = this._participants.get(attributes.guidPrefix);
     if (participant == undefined) {
-      this._log?.warn?.(`Received subscription from unknown participant ${attributes.guidPrefix}`);
+      this._log?.warn?.(`received subscription from unknown participant ${attributes.guidPrefix}`);
       return guid;
     }
 
     if (!participant.remoteReaders.has(attributes.entityId)) {
       this._log?.info?.(
-        `Tracking subscription ${attributes.topicName} (${attributes.typeName}) (${guid})`,
+        `tracking subscription ${attributes.topicName} (${attributes.typeName}) (${guid})`,
       );
     }
 
