@@ -70,6 +70,10 @@ import {
   UdpSocketCreate,
 } from "./transport";
 
+export type ParticipantTuning = {
+  keepAliveMs?: number;
+};
+
 export interface ParticipantEvents {
   error: (error: Error) => void;
   discoveredParticipant: (participant: ParticipantAttributes) => void;
@@ -104,6 +108,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   private _multicastLocator: Locator;
   private nextEndpointId = 1;
   private _receivedBytes = 0;
+  private _keepAliveMs: number;
+  private _keepAliveTimer?: ReturnType<typeof setTimeout>;
 
   get running(): boolean {
     return this._running;
@@ -130,6 +136,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     log?: LoggerService;
     protocolVersion?: ProtocolVersion;
     vendorId?: VendorId;
+    tuning?: ParticipantTuning;
   }) {
     super();
 
@@ -150,8 +157,11 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     };
 
     if (fromHex(this.attributes.guidPrefix).length !== 12) {
-      throw new Error(`Invalid guidPrefix "${this.attributes.guidPrefix}", must be 12 byte hex`);
+      throw new Error(`invalid guidPrefix "${this.attributes.guidPrefix}", must be 12 byte hex`);
     }
+
+    const tuning = options.tuning ?? {};
+    this._keepAliveMs = tuning.keepAliveMs ?? 4000;
 
     this._addresses = options.addresses;
     this._udpSocketCreate = options.udpSocketCreate;
@@ -170,6 +180,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   async start(): Promise<void> {
+    if (!this.running) {
+      throw new Error(`partipant ${this.attributes.guidPrefix} cannot start after shutdown`);
+    }
+    if (this._multicastSocket != undefined) {
+      throw new Error(`participant ${this.attributes.guidPrefix} was already started`);
+    }
+
     // TODO: Listen on all interfaces
     const address = this._addresses[0]!;
     this._log?.debug?.(`starting participant ${this.name} on ${address}`);
@@ -209,11 +226,19 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     // Send our participant advertisement to multicast
     await this.broadcastParticipant(this.attributes);
+
+    if (this._keepAliveMs > 0) {
+      this._keepAliveTimer = setInterval(() => void this.sendAlive(), this._keepAliveMs);
+    }
   }
 
   shutdown(): void {
     this._log?.debug?.("shutting down");
     this._running = false;
+    if (this._keepAliveTimer != undefined) {
+      clearTimeout(this._keepAliveTimer);
+      this._keepAliveTimer = undefined;
+    }
     this.removeAllListeners();
     this._participants.clear();
     this._writers.clear();
@@ -227,7 +252,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this.attributes.metatrafficMulticastLocatorList = [];
   }
 
-  async sendAlive(): Promise<void> {
+  async sendAlive(manual?: boolean): Promise<void> {
     const srcSocket = this._unicastSocket;
     if (srcSocket == undefined) {
       return;
@@ -247,7 +272,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       kind: ChangeKind.Alive,
       writerGuid,
       sequenceNumber: writer.history.nextSequenceNum(),
-      data: livelinessPayload(this.attributes.guidPrefix),
+      data: livelinessPayload(this.attributes.guidPrefix, manual ?? false),
       instanceHandle: writerGuid,
     });
 
@@ -361,7 +386,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   subscribe(opts: SubscribeOpts): EntityId {
     const writer = this._writers.get(EntityIdBuiltin.SubscriptionsWriter);
     if (writer == undefined) {
-      throw new Error(`Cannot subscribe without SubscriptionsWriter`);
+      throw new Error(`cannot subscribe without SubscriptionsWriter`);
     }
 
     // Create a reader entityId/Guid for this subscription
@@ -495,7 +520,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   async advertiseParticipant(attributes: ParticipantAttributes): Promise<void> {
     const writer = this._writers.get(EntityIdBuiltin.ParticipantWriter);
     if (writer == undefined) {
-      throw new Error(`Cannot advertise participant without ParticipantWriter`);
+      throw new Error(`cannot advertise participant without ParticipantWriter`);
     }
 
     const participantGuid = makeGuid(attributes.guidPrefix, EntityIdBuiltin.Participant);

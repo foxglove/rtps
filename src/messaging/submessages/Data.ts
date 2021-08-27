@@ -71,7 +71,7 @@ export class DataMsgView extends SubMessageView {
 
     const octetsToInlineQoS = view.getUint16(offset + 6, this.littleEndian);
     if (octetsToInlineQoS !== 16) {
-      throw new Error(`Unexpected octetsToInlineQoS, expected 16 got ${octetsToInlineQoS}`);
+      throw new Error(`unexpected octetsToInlineQoS, expected 16 got ${octetsToInlineQoS}`);
     }
   }
 

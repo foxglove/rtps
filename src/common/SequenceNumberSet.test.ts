@@ -7,9 +7,12 @@ describe("SequenceNumberSet", () => {
     expect(set.numBits).toEqual(0);
     expect(set.size).toEqual(12);
     expect(set.empty()).toEqual(true);
-    expect(set.maxSequenceNumber()).toEqual(1n);
+    expect(set.maxSequenceNumber()).toEqual(0n);
     expect(Array.from(set.sequenceNumbers())).toEqual([]);
     expect(set.bitmap).toEqual(new Uint32Array([0, 0, 0, 0, 0, 0, 0, 0]));
+
+    const set2 = new SequenceNumberSet(5n, 0);
+    expect(set2.maxSequenceNumber()).toEqual(4n);
   });
 
   it("constructs with numBits", () => {

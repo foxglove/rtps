@@ -32,7 +32,7 @@ export class Locator {
       const addressData = ipv4ToBytes(this.address);
       writer.uint8Array(addressData, false);
     } else {
-      throw new Error(`Unsupported LocatorKind ${this.kind}`);
+      throw new Error(`unsupported LocatorKind ${this.kind}`);
     }
   }
 

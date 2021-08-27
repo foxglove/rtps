@@ -46,7 +46,8 @@ export class SequenceNumberSet {
   }
 
   maxSequenceNumber(): SequenceNumber {
-    return this.base + BigInt(Math.max(0, this.numBits - 1));
+    const max = this.base + BigInt(this.numBits - 1);
+    return max >= 0n ? max : 0n;
   }
 
   *sequenceNumbers(): Generator<SequenceNumber> {

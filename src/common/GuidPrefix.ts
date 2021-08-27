@@ -29,7 +29,7 @@ export function guidPrefixFromCDR(reader: CdrReader): GuidPrefix {
 
 export function writeGuidPrefix(guidPrefix: GuidPrefix, output: DataView, offset: number): void {
   if (guidPrefix.length !== 24) {
-    throw new Error(`Invalid guidPrefix "${guidPrefix}"`);
+    throw new Error(`invalid guidPrefix "${guidPrefix}"`);
   }
   const hostId = parseInt(guidPrefix.slice(0, 8), 16);
   const appId = parseInt(guidPrefix.slice(8, 16), 16);
@@ -42,7 +42,7 @@ export function writeGuidPrefix(guidPrefix: GuidPrefix, output: DataView, offset
 
 export function writeGuidPrefixToCDR(guidPrefix: GuidPrefix, output: CdrWriter): void {
   if (guidPrefix.length !== 24) {
-    throw new Error(`Invalid guidPrefix "${guidPrefix}"`);
+    throw new Error(`invalid guidPrefix "${guidPrefix}"`);
   }
   const hostId = parseInt(guidPrefix.slice(0, 8), 16);
   const appId = parseInt(guidPrefix.slice(8, 16), 16);
