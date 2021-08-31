@@ -43,7 +43,7 @@ async function main() {
 
   await new Promise((r) => setTimeout(r, 5000));
 
-  participant.shutdown();
+  await participant.shutdown();
 }
 
 void main();

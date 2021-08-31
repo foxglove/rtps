@@ -26,7 +26,6 @@ import {
   SubMessageId,
   uint32ToHex,
   VendorId,
-  writeGuid,
 } from "./common";
 import { parseEndpoint, parseParticipant } from "./discovery";
 import { CacheChange, EMPTY_DATA } from "./history";
@@ -53,6 +52,8 @@ import {
   Reader,
   ReaderView,
   SubscribeOpts,
+  unregisterPayload,
+  UnregisterType,
   UserData,
   Writer,
   WriterView,
@@ -232,7 +233,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     }
   }
 
-  shutdown(): void {
+  async shutdown(): Promise<void> {
     this._log?.debug?.("shutting down");
     this._running = false;
     if (this._keepAliveTimer != undefined) {
@@ -240,6 +241,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       this._keepAliveTimer = undefined;
     }
     this.removeAllListeners();
+
+    try {
+      await this.unadvertiseParticipant(this.attributes.guidPrefix);
+    } catch (err) {
+      this._log?.warn?.(`failed to unadvertise participant: ${err}`);
+    }
+
     this._participants.clear();
     this._writers.clear();
     this._subscriptions.clear();
@@ -467,48 +475,12 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       }
     }
 
-    // Create the inlineQoS and serializedKey data
-    const payload = new Uint8Array(40);
-    const payloadView = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-    payload.set(
-      [
-        0x71, // PID_STATUS_INFO
-        0x00, // PID_STATUS_INFO
-        0x04, // parameterLength = 4
-        0x00, // parameterLength
-        0x00, // flags
-        0x00, // flags
-        0x00, // flags
-        0x03, // flags = Unregistered, Disposed
-        0x01, // PID_SENTINEL
-        0x00, // PID_SENTINEL
-        0x00, // PID_SENTINEL
-        0x00, // PID_SENTINEL
-      ],
-      0,
-    );
-    payload.set(
-      [
-        0x00, // PL_CDR_LE
-        0x03, // PL_CDR_LE
-        0x00, // cdrOptions
-        0x00, // cdrOptions
-        0x5a, // PID_ENDPOINT_GUID
-        0x00, // PID_ENDPOINT_GUID
-        0x10, // parameterLength = 16
-        0x00, // parameterLength
-      ],
-      12,
-    );
-    writeGuid(readerGuid, payloadView, 20);
-    payload.set([0x01, 0x00, 0x00, 0x00], 36); // PID_SENTINEL
-
     writer.history.set({
       timestamp: fromDate(new Date()),
       kind: ChangeKind.NotAliveDisposed | ChangeKind.NotAliveUnregistered,
       writerGuid: makeGuid(this.attributes.guidPrefix, EntityIdBuiltin.SubscriptionsWriter),
       sequenceNumber: writer.history.nextSequenceNum(),
-      data: payload,
+      data: unregisterPayload(UnregisterType.Endpoint, readerGuid),
       instanceHandle: readerGuid,
     });
 
@@ -588,6 +560,27 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     this._log?.debug?.(`broadcasting participant ${attributes.guidPrefix} to multicast`);
     await sendMessageToUdp(msg, srcSocket, [this._multicastLocator]);
+  }
+
+  async unadvertiseParticipant(guidPrefix: GuidPrefix): Promise<void> {
+    const writer = this._writers.get(EntityIdBuiltin.ParticipantWriter);
+    if (writer == undefined) {
+      throw new Error(`cannot unadvertise participant without ParticipantWriter`);
+    }
+
+    const participantGuid = makeGuid(guidPrefix, EntityIdBuiltin.Participant);
+
+    writer.history.set({
+      timestamp: fromDate(new Date()),
+      kind: ChangeKind.NotAliveDisposed | ChangeKind.NotAliveUnregistered,
+      writerGuid: makeGuid(this.attributes.guidPrefix, EntityIdBuiltin.SubscriptionsWriter),
+      sequenceNumber: writer.history.nextSequenceNum(),
+      data: unregisterPayload(UnregisterType.Participant, participantGuid),
+      instanceHandle: participantGuid,
+    });
+
+    this._log?.debug?.(`unadvertising participant ${guidPrefix}`);
+    await this.sendChanges(writer);
   }
 
   topicWriters(): EndpointAttributes[] {
