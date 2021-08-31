@@ -54,6 +54,9 @@ export class AckNackView extends SubMessageView {
   }
 
   get count(): number {
-    return this.view.getUint32(this.offset + 28, this.littleEndian);
+    const numBits = this.view.getUint32(this.offset + 12 + 8, this.littleEndian);
+    const numLongs = Math.floor((numBits + 31) / 32);
+    const offset = this.offset + 12 + 8 + 4 + numLongs * 4;
+    return this.view.getUint32(offset, this.littleEndian);
   }
 }

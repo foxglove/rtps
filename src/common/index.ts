@@ -1,6 +1,7 @@
 export * from "./DurabilityService";
 export * from "./EntityId";
 export * from "./enums";
+export * from "./FragmentNumberSet";
 export * from "./Guid";
 export * from "./GuidPrefix";
 export * from "./hasBuiltinEndpoint";
