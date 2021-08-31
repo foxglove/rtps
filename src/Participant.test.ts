@@ -15,6 +15,6 @@ describe("Participant", () => {
     });
     await participant.start();
     expect(participant.unicastSocket).toBeDefined();
-    participant.shutdown();
+    await participant.shutdown();
   });
 });
