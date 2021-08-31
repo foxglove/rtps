@@ -12,8 +12,6 @@ import {
   SequenceNumber,
   sequenceNumberFromData,
   sequenceNumberToData,
-  EntityIdBuiltin,
-  guidPrefixFromCDR,
 } from "../../common";
 import { ParametersView } from "../ParametersView";
 import { SubMessage } from "../SubMessage";
@@ -87,34 +85,8 @@ export class DataMsgView extends SubMessageView {
     return sequenceNumberFromData(this.view, this.offset + 16, this.littleEndian);
   }
 
-  get encapsulationKind(): EncapsulationKind {
-    return this.view.getUint16(this.offset + 24, false);
-  }
-
-  get encapsulationOptions(): number {
-    return this.view.getUint16(this.offset + 26, false);
-  }
-
   get serializedData(): Uint8Array {
     const payloadLength = this.octetsToNextHeader - 24;
     return new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset + 24, payloadLength);
-  }
-
-  parameters(): ParametersView | undefined {
-    const kind = this.encapsulationKind;
-    if (kind !== EncapsulationKind.PL_CDR_BE && kind !== EncapsulationKind.PL_CDR_LE) {
-      return undefined;
-    }
-    const reader = new CdrReader(this.serializedData);
-    return new ParametersView(reader);
-  }
-
-  participantMessageData(): GuidPrefix | undefined {
-    if (this.writerEntityId !== EntityIdBuiltin.ParticipantMessageWriter) {
-      return undefined;
-    }
-
-    const reader = new CdrReader(this.serializedData);
-    return guidPrefixFromCDR(reader);
   }
 }
