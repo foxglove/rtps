@@ -1,4 +1,3 @@
-import { CdrReader } from "@foxglove/cdr";
 import { Time } from "@foxglove/rostime";
 
 import {
@@ -6,14 +5,12 @@ import {
   entityIdFromData,
   writeEntityId,
   GuidPrefix,
-  EncapsulationKind,
   LittleEndian,
   SubMessageId,
   SequenceNumber,
   sequenceNumberFromData,
   sequenceNumberToData,
 } from "../../common";
-import { ParametersView } from "../ParametersView";
 import { SubMessage } from "../SubMessage";
 import { SubMessageView } from "../SubMessageView";
 

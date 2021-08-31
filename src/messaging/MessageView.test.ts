@@ -7,13 +7,13 @@ import {
   BuiltinEndpointSet,
   Durability,
   HistoryKind,
-  EncapsulationKind,
   LocatorKind,
   Reliability,
   SubMessageId,
   ParameterId,
 } from "../common";
 import { MessageView } from "./MessageView";
+import { ParametersView } from "./ParametersView";
 import { DataMsgView, InfoTsView } from "./submessages";
 
 describe("MessageView", () => {
@@ -68,8 +68,6 @@ describe("MessageView", () => {
     expect(dataMsg.readerEntityId).toEqual(0);
     expect(dataMsg.writerEntityId).toEqual(EntityIdBuiltin.ParticipantWriter);
     expect(dataMsg.writerSeqNumber).toEqual(1n);
-    expect(dataMsg.encapsulationKind).toEqual(EncapsulationKind.PL_CDR_LE);
-    expect(dataMsg.encapsulationOptions).toEqual(0);
     expect(dataMsg.serializedData[0]).toEqual(0);
     expect(dataMsg.serializedData[1]).toEqual(3);
     expect(dataMsg.serializedData[2]).toEqual(0);
@@ -78,10 +76,10 @@ describe("MessageView", () => {
     expect(dataMsg.serializedData).toEqual(data.slice(56, 56 + 224));
     expect(dataMsg.effectiveTimestamp).toEqual({ sec: 1625943731, nsec: 1222751420 });
 
-    let params = dataMsg.parameters()!;
+    let params = ParametersView.FromCdr(dataMsg.serializedData)!;
     expect(params).toBeDefined();
     expect(params.allParameters().size).toEqual(11);
-    params = dataMsg.parameters()!;
+    params = ParametersView.FromCdr(dataMsg.serializedData)!;
     expect(params.allParameters().size).toEqual(11);
 
     const allParams = params.allParameters();
@@ -153,7 +151,7 @@ describe("MessageView", () => {
     expect(subMessages).toHaveLength(2);
 
     const dataMsg = subMessages[1]! as DataMsgView;
-    const allParams = dataMsg.parameters()!.allParameters();
+    const allParams = ParametersView.FromCdr(dataMsg.serializedData)!.allParameters();
     expect(allParams.get(ParameterId.PID_TOPIC_NAME)).toEqual("rt/rosout");
     expect(allParams.get(ParameterId.PID_TYPE_NAME)).toEqual("rcl_interfaces::msg::dds_::Log_");
     expect(allParams.get(ParameterId.PID_DURABILITY)).toEqual(Durability.TransientLocal);
