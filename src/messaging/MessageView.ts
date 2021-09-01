@@ -11,11 +11,14 @@ import {
 import { SubMessageView } from "./SubMessageView";
 import {
   AckNackView,
+  DataFragView,
   DataMsgView,
   GapView,
+  HeartbeatFragView,
   HeartbeatView,
   InfoDstView,
   InfoTsView,
+  NackFragView,
   PadView,
 } from "./submessages";
 
@@ -108,16 +111,13 @@ function getSubMessageView(
     case SubMessageId.INFO_DST:
       return new InfoDstView(data, view, offset);
     case SubMessageId.NACK_FRAG:
-      // return new NackFragView(data, view, offset, guidPrefix);
-      return new SubMessageView(data, view, offset, guidPrefix);
+      return new NackFragView(data, view, offset, guidPrefix);
     case SubMessageId.HEARTBEAT_FRAG:
-      // return new HeartbeatFragView(data, view, offset, guidPrefix);
-      return new SubMessageView(data, view, offset, guidPrefix);
+      return new HeartbeatFragView(data, view, offset, guidPrefix);
     case SubMessageId.DATA:
       return new DataMsgView(data, view, offset, guidPrefix, timestamp);
     case SubMessageId.DATA_FRAG:
-      // return new DataFragView(data, view, offset, guidPrefix, timestamp);
-      return new SubMessageView(data, view, offset, guidPrefix, timestamp);
+      return new DataFragView(data, view, offset, guidPrefix, timestamp);
     case SubMessageId.SEC_BODY:
       // return new SecBodyView(data, view, offset, guidPrefix, timestamp);
       return new SubMessageView(data, view, offset, guidPrefix, timestamp);

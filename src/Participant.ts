@@ -1,3 +1,4 @@
+import { CdrReader } from "@foxglove/cdr";
 import { areEqual, fromDate, fromMillis, Time } from "@foxglove/rostime";
 import { EventEmitter } from "eventemitter3";
 
@@ -9,11 +10,13 @@ import {
   EntityId,
   EntityIdBuiltin,
   EntityKind,
+  FragmentNumberSet,
   fromHex,
   generateGuidPrefix,
   Guid,
   guidParts,
   GuidPrefix,
+  guidPrefixFromCDR,
   hasBuiltinEndpoint,
   HistoryKind,
   Locator,
@@ -22,6 +25,7 @@ import {
   makeGuid,
   ProtocolVersion,
   Reliability,
+  SequenceNumber,
   SequenceNumberSet,
   SubMessageId,
   uint32ToHex,
@@ -29,23 +33,28 @@ import {
 } from "./common";
 import { parseEndpoint, parseParticipant } from "./discovery";
 import { CacheChange, EMPTY_DATA } from "./history";
-import { Message, MessageView, Parameters } from "./messaging";
+import { Message, MessageView, Parameters, ParametersView } from "./messaging";
 import {
   AckNack,
   AckNackFlags,
   AckNackView,
   DataFlags,
+  DataFragView,
   DataMsg,
   DataMsgView,
   Gap,
   GapView,
   Heartbeat,
   HeartbeatFlags,
+  HeartbeatFragView,
   HeartbeatView,
   InfoDst,
   InfoTs,
+  NackFrag,
+  NackFragView,
 } from "./messaging/submessages";
 import {
+  DataFragments,
   EndpointAttributes,
   livelinessPayload,
   matchLocalSubscription,
@@ -636,6 +645,51 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     await sendMessageToUdp(msg, srcSocket, locators);
   }
 
+  private async sendNackFragTo(
+    guidPrefix: GuidPrefix,
+    heartbeatFrag: HeartbeatFragView,
+    fragmentTracker: DataFragments,
+    locators: Locator[],
+  ): Promise<void> {
+    const srcSocket = this._unicastSocket;
+    if (srcSocket == undefined) {
+      return;
+    }
+
+    const missing = Array.from(fragmentTracker.missingFragments());
+    const base = missing[0] ?? 1;
+    const numBits = heartbeatFrag.lastFragmentNumber - base;
+    const state = new FragmentNumberSet(base, numBits);
+    for (const idx of missing) {
+      const fragmentNum = idx + 1;
+      if (fragmentNum > heartbeatFrag.lastFragmentNumber) {
+        break;
+      }
+      state.add(fragmentNum);
+    }
+
+    // RTPS message
+    const msg = new Message(this.attributes);
+    msg.writeSubmessage(new InfoDst(guidPrefix));
+    msg.writeSubmessage(
+      new NackFrag(
+        heartbeatFrag.readerEntityId,
+        heartbeatFrag.writerEntityId,
+        heartbeatFrag.writerSeqNumber,
+        state,
+        ++fragmentTracker.count,
+      ),
+    );
+
+    this._log?.debug?.(
+      `sending NACK_FRAG to ${makeGuid(
+        guidPrefix,
+        heartbeatFrag.writerEntityId,
+      )}, ${state.toString()}`,
+    );
+    await sendMessageToUdp(msg, srcSocket, locators);
+  }
+
   private addBuiltinWriter(
     endpointsAvailable: BuiltinEndpointSet,
     flag: BuiltinEndpointSet,
@@ -703,14 +757,30 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         continue;
       }
 
-      if (msg.submessageId === SubMessageId.HEARTBEAT) {
-        this.handleHeartbeat(message.guidPrefix, msg as HeartbeatView);
-      } else if (msg.submessageId === SubMessageId.ACKNACK) {
-        this.handleAckNack(message.guidPrefix, msg as AckNackView);
-      } else if (msg.submessageId === SubMessageId.DATA) {
-        this.handleDataMsg(message.guidPrefix, msg as DataMsgView);
-      } else if (msg.submessageId === SubMessageId.GAP) {
-        this.handleGap(message.guidPrefix, msg as GapView);
+      switch (msg.submessageId) {
+        case SubMessageId.HEARTBEAT:
+          this.handleHeartbeat(message.guidPrefix, msg as HeartbeatView);
+          break;
+        case SubMessageId.ACKNACK:
+          this.handleAckNack(message.guidPrefix, msg as AckNackView);
+          break;
+        case SubMessageId.DATA:
+          this.handleDataMsg(message.guidPrefix, msg as DataMsgView);
+          break;
+        case SubMessageId.GAP:
+          this.handleGap(message.guidPrefix, msg as GapView);
+          break;
+        case SubMessageId.DATA_FRAG:
+          this.handleDataFrag(message.guidPrefix, msg as DataFragView);
+          break;
+        case SubMessageId.HEARTBEAT_FRAG:
+          this.handleHeartbeatFrag(message.guidPrefix, msg as HeartbeatFragView);
+          break;
+        case SubMessageId.NACK_FRAG:
+          this.handleNackFrag(message.guidPrefix, msg as NackFragView);
+          break;
+        default:
+          break;
       }
     }
   };
@@ -837,34 +907,56 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   };
 
   private handleDataMsg = (guidPrefix: GuidPrefix, dataMsg: DataMsgView): void => {
-    const writerGuid = makeGuid(guidPrefix, dataMsg.writerEntityId);
-    const timestamp = dataMsg.effectiveTimestamp ?? fromDate(new Date());
-    const sequenceNumber = dataMsg.writerSeqNumber;
-    const data = dataMsg.serializedData;
+    this.handleData(
+      dataMsg.effectiveTimestamp ?? fromDate(new Date()),
+      guidPrefix,
+      dataMsg.readerEntityId,
+      dataMsg.writerEntityId,
+      dataMsg.writerSeqNumber,
+      dataMsg.serializedData,
+    );
+  };
+
+  private handleData = (
+    timestamp: Time,
+    guidPrefix: GuidPrefix,
+    readerEntityId: EntityId,
+    writerEntityId: EntityId,
+    writerSeqNumber: SequenceNumber,
+    serializedData: Uint8Array,
+  ): void => {
+    const writerGuid = makeGuid(guidPrefix, writerEntityId);
+    const sequenceNumber = writerSeqNumber;
+    const data = serializedData;
 
     // Get all of our readers for this writer
-    const readers = this.getReaders(dataMsg.readerEntityId, writerGuid);
+    const readers = this.getReaders(readerEntityId, writerGuid);
     this._log?.debug?.(
-      `  [SUBMSG] DATA reader=${uint32ToHex(dataMsg.readerEntityId)} writer=${uint32ToHex(
-        dataMsg.writerEntityId,
+      `  [SUBMSG] DATA reader=${uint32ToHex(readerEntityId)} writer=${uint32ToHex(
+        writerEntityId,
       )} ${data.length} bytes (seq ${sequenceNumber}) from ${writerGuid}, ${
         readers.length
       } reader(s)`,
     );
 
     let instanceHandle: Guid | undefined;
-    switch (dataMsg.writerEntityId) {
+    switch (writerEntityId) {
       case EntityIdBuiltin.PublicationsWriter:
-        instanceHandle = this.handlePublication(dataMsg, timestamp);
+        instanceHandle = this.handlePublication(serializedData, timestamp);
         break;
       case EntityIdBuiltin.SubscriptionsWriter:
-        instanceHandle = this.handleSubscription(dataMsg, timestamp);
+        instanceHandle = this.handleSubscription(serializedData, timestamp);
         break;
       case EntityIdBuiltin.ParticipantWriter:
-        instanceHandle = this.handleParticipant(guidPrefix, dataMsg, timestamp);
+        instanceHandle = this.handleParticipant(guidPrefix, serializedData, timestamp);
         break;
       case EntityIdBuiltin.ParticipantMessageWriter:
-        instanceHandle = this.handleParticipantMessage(guidPrefix, dataMsg, timestamp);
+        instanceHandle = this.handleParticipantMessage(
+          guidPrefix,
+          writerEntityId,
+          serializedData,
+          timestamp,
+        );
         break;
       case EntityIdBuiltin.TypeLookupRequestWriter:
         this._log?.warn?.(`received type lookup request from ${guidPrefix}`);
@@ -873,7 +965,14 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         this._log?.warn?.(`received type lookup reply from ${guidPrefix}`);
         break;
       default:
-        instanceHandle = this.handleUserData(guidPrefix, dataMsg, timestamp, readers);
+        instanceHandle = this.handleUserData(
+          guidPrefix,
+          writerEntityId,
+          writerSeqNumber,
+          serializedData,
+          timestamp,
+          readers,
+        );
         break;
     }
 
@@ -888,6 +987,83 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         instanceHandle,
       });
     }
+  };
+
+  private handleDataFrag = (guidPrefix: GuidPrefix, dataFrag: DataFragView): void => {
+    const participant = this._participants.get(guidPrefix);
+    if (participant == undefined) {
+      this._log?.warn?.(`received DATA_FRAG from unknown participant ${guidPrefix}`);
+      return;
+    }
+
+    const fragmentTracker = participant.getFragments(
+      dataFrag.writerEntityId,
+      dataFrag.writerSeqNumber,
+      dataFrag.sampleSize,
+      dataFrag.fragmentSize,
+    );
+
+    const fragments = dataFrag.fragments;
+    for (let i = 0; i < fragments.length; i++) {
+      const fragment = fragments[i]!;
+      const index = dataFrag.fragmentStartingNum + i - 1;
+      fragmentTracker.addFragment(index, fragment);
+    }
+
+    // Check if the complete DATA message is available
+    const serializedData = fragmentTracker.data();
+    if (serializedData != undefined) {
+      // Stop tracking the individual fragments of this message
+      participant.removeFragments(dataFrag.writerEntityId, dataFrag.writerSeqNumber);
+
+      // Handle the assembled data message
+      this.handleData(
+        dataFrag.effectiveTimestamp ?? fromDate(new Date()),
+        guidPrefix,
+        dataFrag.readerEntityId,
+        dataFrag.writerEntityId,
+        dataFrag.writerSeqNumber,
+        serializedData,
+      );
+    }
+  };
+
+  private handleHeartbeatFrag = (
+    guidPrefix: GuidPrefix,
+    heartbeatFrag: HeartbeatFragView,
+  ): void => {
+    const participant = this._participants.get(guidPrefix);
+    if (participant == undefined) {
+      this._log?.warn?.(`received HEARTBEAT_FRAG from unknown participant ${guidPrefix}`);
+      return;
+    }
+
+    const fragmentTracker = participant.tryGetFragments(
+      heartbeatFrag.writerEntityId,
+      heartbeatFrag.writerSeqNumber,
+    );
+    if (fragmentTracker == undefined) {
+      this._log?.warn?.(
+        `received HEARTBEAT_FRAG for unknown packet ${uint32ToHex(
+          heartbeatFrag.writerEntityId,
+        )} :: ${heartbeatFrag.writerSeqNumber}`,
+      );
+      return;
+    }
+
+    if (!fragmentTracker.hasUpTo(heartbeatFrag.lastFragmentNumber - 1)) {
+      // One or more fragments are missing, send a NACK_FRAG
+      void this.sendNackFragTo(
+        guidPrefix,
+        heartbeatFrag,
+        fragmentTracker,
+        participant.attributes.metatrafficUnicastLocatorList,
+      );
+    }
+  };
+
+  private handleNackFrag = (_guidPrefix: GuidPrefix, _nackFrag: NackFragView): void => {
+    // TODO: Handle this when we support publishing fragmented data
   };
 
   private async sendInitialHeartbeats(participant: ParticipantView): Promise<void> {
@@ -927,10 +1103,10 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private handleParticipant = (
     senderGuidPrefix: GuidPrefix,
-    dataMsg: DataMsgView,
+    serializedData: Uint8Array,
     timestamp: Time | undefined,
   ): Guid | undefined => {
-    const params = dataMsg.parameters();
+    const params = ParametersView.FromCdr(serializedData);
     if (params == undefined) {
       this._log?.warn?.(`ignoring participant message with no parameters from ${senderGuidPrefix}`);
       return undefined;
@@ -973,22 +1149,16 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private handleParticipantMessage = (
     senderGuidPrefix: GuidPrefix,
-    dataMsg: DataMsgView,
+    writerEntityId: EntityId,
+    serializedData: Uint8Array,
     _timestamp: Time | undefined,
   ): Guid | undefined => {
-    const guidPrefix = dataMsg.participantMessageData();
-    if (guidPrefix == undefined) {
-      this._log?.warn?.(`failed to parse participant message data from ${senderGuidPrefix}`);
-      return undefined;
-    }
-
+    const reader = new CdrReader(serializedData);
+    const guidPrefix = guidPrefixFromCDR(reader);
     const guid = makeGuid(guidPrefix, EntityIdBuiltin.Participant);
 
     this._log?.debug?.(
-      `received participant message from ${makeGuid(
-        senderGuidPrefix,
-        dataMsg.writerEntityId,
-      )} for ${guid}`,
+      `received participant message from ${makeGuid(senderGuidPrefix, writerEntityId)} for ${guid}`,
     );
 
     // TODO: Handle this when we have a concept of participant alive/stale states
@@ -998,7 +1168,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private handleUserData = (
     senderGuidPrefix: GuidPrefix,
-    dataMsg: DataMsgView,
+    writerEntityId: EntityId,
+    writerSeqNumber: SequenceNumber,
+    serializedData: Uint8Array,
     timestamp: Time | undefined,
     readers: Reader[],
   ): undefined => {
@@ -1008,17 +1180,15 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return undefined;
     }
 
-    const writerView = participant.remoteWriters.get(dataMsg.writerEntityId);
+    const writerView = participant.remoteWriters.get(writerEntityId);
     if (writerView == undefined) {
-      this._log?.warn?.(
-        `received user data from unknown writer ${uint32ToHex(dataMsg.writerEntityId)}`,
-      );
+      this._log?.warn?.(`received user data from unknown writer ${uint32ToHex(writerEntityId)}`);
       return undefined;
     }
 
     if (readers.length === 0) {
       this._log?.warn?.(
-        `received user data from writer ${uint32ToHex(dataMsg.writerEntityId)} with no readers`,
+        `received user data from writer ${uint32ToHex(writerEntityId)} with no readers`,
       );
       return undefined;
     }
@@ -1028,8 +1198,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         timestamp,
         publication: writerView.attributes,
         subscription: reader.attributes,
-        writerSeqNumber: dataMsg.writerSeqNumber,
-        serializedData: dataMsg.serializedData,
+        writerSeqNumber,
+        serializedData,
       });
     }
 
@@ -1037,13 +1207,14 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   };
 
   private handlePublication = (
-    dataMsg: DataMsgView,
+    serializedData: Uint8Array,
     timestamp: Time | undefined,
   ): Guid | undefined => {
-    const attributes = parseEndpoint(dataMsg.parameters(), timestamp);
+    const params = ParametersView.FromCdr(serializedData);
+    const attributes = parseEndpoint(params, timestamp);
     if (attributes == undefined) {
       this._log?.warn?.(
-        `failed to parse publication attributes from ${dataMsg.serializedData.length} byte DATA`,
+        `failed to parse publication attributes from ${serializedData.length} byte DATA`,
       );
       return undefined;
     }
@@ -1083,12 +1254,15 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   };
 
   private handleSubscription = (
-    dataMsg: DataMsgView,
+    serializedData: Uint8Array,
     timestamp: Time | undefined,
   ): Guid | undefined => {
-    const attributes = parseEndpoint(dataMsg.parameters(), timestamp);
+    const params = ParametersView.FromCdr(serializedData);
+    const attributes = parseEndpoint(params, timestamp);
     if (attributes == undefined) {
-      this._log?.warn?.(`failed to parse subscription attributes from ${dataMsg.offset} byte DATA`);
+      this._log?.warn?.(
+        `failed to parse subscription attributes from ${serializedData.length} byte payload`,
+      );
       return undefined;
     }
 

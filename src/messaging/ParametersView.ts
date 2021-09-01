@@ -1,4 +1,4 @@
-import { CdrReader } from "@foxglove/cdr";
+import { CdrReader, EncapsulationKind } from "@foxglove/cdr";
 import { Duration, Time } from "@foxglove/rostime";
 
 import {
@@ -122,6 +122,15 @@ export class ParametersView {
 
   expectsInlineQoS(): boolean {
     return (this.map.get(ParameterId.PID_EXPECTS_INLINE_QOS) as boolean) ?? false;
+  }
+
+  static FromCdr(serializedData: Uint8Array): ParametersView | undefined {
+    const reader = new CdrReader(serializedData);
+    const kind = reader.kind;
+    if (kind !== EncapsulationKind.PL_CDR_BE && kind !== EncapsulationKind.PL_CDR_LE) {
+      return undefined;
+    }
+    return new ParametersView(reader);
   }
 }
 

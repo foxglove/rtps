@@ -11,8 +11,10 @@ import {
   hasBuiltinEndpoint,
   ReliabilityAndMaxBlockingTime,
   HistoryAndDepth,
+  SequenceNumber,
+  makeGuid,
 } from "./common";
-import { Reader } from "./routing";
+import { DataFragments, Reader } from "./routing";
 import { ReaderView } from "./routing/ReaderView";
 import { WriterView } from "./routing/WriterView";
 
@@ -31,6 +33,7 @@ export class ParticipantView {
   readonly localReaderIdToRemoteWriterId = new Map<EntityId, EntityId>();
   readonly localWriterIdToRemoteReaderIds = new Map<EntityId, EntityId[]>();
   readonly remoteWriterIdToLocalReaderIds = new Map<EntityId, EntityId[]>();
+  readonly writerIdToDataFragments = new Map<EntityId, Map<SequenceNumber, DataFragments>>();
 
   constructor(local: Participant, remote: ParticipantAttributes) {
     this.attributes = remote;
@@ -112,6 +115,48 @@ export class ParticipantView {
       }
     }
     return readerViews;
+  }
+
+  getFragments(
+    writerId: EntityId,
+    sequenceNumber: SequenceNumber,
+    totalBytes: number,
+    fragmentSize: number,
+  ): DataFragments {
+    let writerFragments = this.writerIdToDataFragments.get(writerId);
+    if (writerFragments == undefined) {
+      writerFragments = new Map();
+      this.writerIdToDataFragments.set(writerId, writerFragments);
+    }
+
+    let fragments = writerFragments.get(sequenceNumber);
+    if (fragments == undefined) {
+      fragments = new DataFragments(totalBytes, fragmentSize);
+      writerFragments.set(sequenceNumber, fragments);
+    }
+
+    if (fragments.totalBytes !== totalBytes || fragments.fragmentSize !== fragmentSize) {
+      const guid = makeGuid(this.attributes.guidPrefix, writerId);
+      throw new Error(
+        `DATA_FRAG mismatch for ${guid}, expected ${fragments.fragmentSize}/${fragments.totalBytes} but got ${fragmentSize}/${totalBytes}`,
+      );
+    }
+
+    return fragments;
+  }
+
+  tryGetFragments(writerId: EntityId, sequenceNumber: SequenceNumber): DataFragments | undefined {
+    return this.writerIdToDataFragments.get(writerId)?.get(sequenceNumber);
+  }
+
+  removeFragments(writerId: EntityId, sequenceNumber: SequenceNumber): void {
+    const writerFragments = this.writerIdToDataFragments.get(writerId);
+    if (writerFragments != undefined) {
+      writerFragments.delete(sequenceNumber);
+      if (writerFragments.size === 0) {
+        this.writerIdToDataFragments.delete(writerId);
+      }
+    }
   }
 
   private addBuiltin(
