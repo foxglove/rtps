@@ -1,7 +1,7 @@
 import { Time } from "@foxglove/rostime";
 
 import { ParticipantAttributes } from "../ParticipantAttributes";
-import { guidParts } from "../common";
+import { guidParts, HistoryKind } from "../common";
 import { ParametersView } from "../messaging";
 import { EndpointAttributes } from "../routing";
 
@@ -72,7 +72,7 @@ export function parseEndpoint(
   const topicName = params.topicName();
   const typeName = params.typeName();
   const reliability = params.reliability();
-  const history = params.history();
+  const history = params.history() ?? { kind: HistoryKind.KeepLast, depth: 1 };
   const protocolVersion = params.protocolVersion();
   const vendorId = params.vendorId();
   const endpointGuid = params.endpointGuid();
@@ -82,7 +82,6 @@ export function parseEndpoint(
     topicName == undefined ||
     typeName == undefined ||
     reliability == undefined ||
-    history == undefined ||
     protocolVersion == undefined ||
     vendorId == undefined ||
     endpointGuid == undefined
