@@ -2,6 +2,8 @@
 
 > _Real-Time Publish Subscribe (DDS-RTPS) protocol implementation with a pluggable transport layer. This is a subset of the complete specification optimized for ROS 2 (Robot Operating System) connections_
 
+[![npm version](https://img.shields.io/npm/v/@foxglove/rtps.svg?style=flat)](https://www.npmjs.com/package/@foxglove/rtps)
+
 ## Usage
 
 ```Typescript
