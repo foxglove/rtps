@@ -71,7 +71,6 @@ import {
   createMulticastUdpSocket,
   createUdpSocket,
   discoveryMulticastPort,
-  locatorForSocket,
   locatorFromUdpAddress,
   MULTICAST_IPv4,
   sendMessageToUdp,
@@ -217,13 +216,14 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     // Create the unicast UDP socket for sending and receiving directly to participants
     this._unicastSocket = await createUdpSocket(
-      address,
+      undefined,
       this._udpSocketCreate,
       this.handleUdpMessage,
       this.handleError,
     );
-    const locator = await locatorForSocket(this._unicastSocket);
-    if (locator != undefined) {
+    const listenAddr = await this._unicastSocket.localAddress();
+    if (listenAddr != undefined) {
+      const locator = locatorFromUdpAddress({ address, family: "IPv4", port: listenAddr.port });
       this._log?.debug?.(`listening on UDP ${locator.address}:${locator.port}`);
       this.attributes.defaultUnicastLocatorList = [locator];
       this.attributes.metatrafficUnicastLocatorList = [locator];
