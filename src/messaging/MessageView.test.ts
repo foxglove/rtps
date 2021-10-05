@@ -106,16 +106,20 @@ describe("MessageView", () => {
     expect(hasBuiltinEndpoint(endpointSet, BuiltinEndpointSet.ParticipantMessageDataWriter)).toEqual(true); // prettier-ignore
     expect(hasBuiltinEndpoint(endpointSet, BuiltinEndpointSet.ParticipantMessageDataReader)).toEqual(true); // prettier-ignore
     expect(allParams.get(ParameterId.PID_DOMAIN_ID)).toEqual(0);
-    expect(allParams.get(ParameterId.PID_DEFAULT_UNICAST_LOCATOR)).toEqual({
-      kind: LocatorKind.UDPv4,
-      port: 58584,
-      address: "10.0.0.46",
-    });
-    expect(allParams.get(ParameterId.PID_METATRAFFIC_UNICAST_LOCATOR)).toEqual({
-      kind: LocatorKind.UDPv4,
-      port: 58584,
-      address: "10.0.0.46",
-    });
+    expect(allParams.get(ParameterId.PID_DEFAULT_UNICAST_LOCATOR)).toEqual([
+      {
+        kind: LocatorKind.UDPv4,
+        port: 58584,
+        address: "10.0.0.46",
+      },
+    ]);
+    expect(allParams.get(ParameterId.PID_METATRAFFIC_UNICAST_LOCATOR)).toEqual([
+      {
+        kind: LocatorKind.UDPv4,
+        port: 58584,
+        address: "10.0.0.46",
+      },
+    ]);
     expect(allParams.get(ParameterId.PID_ADLINK_PARTICIPANT_VERSION_INFO)).toEqual("Johns-MacBook-Pro.local/0.8.0/Darwin/Darwin"); // prettier-ignore
     expect(allParams.get(ParameterId.PID_SAMPLE_SIGNATURE)).toEqual(new Uint8Array([0, 0, 0x10, 0])); // prettier-ignore
     expect(allParams.get(ParameterId.PID_SENTINEL)).toEqual(undefined);

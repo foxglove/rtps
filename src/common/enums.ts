@@ -94,6 +94,7 @@ export enum LocatorKind {
   Reserved = 0,
   UDPv4 = 1,
   UDPv6 = 2,
+  Unknown = 16,
 }
 
 export enum VendorId {
