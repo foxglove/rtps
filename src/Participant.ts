@@ -71,7 +71,6 @@ import {
   createMulticastUdpSocket,
   createUdpSocket,
   discoveryMulticastPort,
-  locatorForSocket,
   locatorFromUdpAddress,
   MULTICAST_IPv4,
   sendMessageToUdp,
@@ -217,13 +216,14 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     // Create the unicast UDP socket for sending and receiving directly to participants
     this._unicastSocket = await createUdpSocket(
-      address,
+      undefined,
       this._udpSocketCreate,
       this.handleUdpMessage,
       this.handleError,
     );
-    const locator = await locatorForSocket(this._unicastSocket);
-    if (locator != undefined) {
+    const listenAddr = await this._unicastSocket.localAddress();
+    if (listenAddr != undefined) {
+      const locator = locatorFromUdpAddress({ address, family: "IPv4", port: listenAddr.port });
       this._log?.debug?.(`listening on UDP ${locator.address}:${locator.port}`);
       this.attributes.defaultUnicastLocatorList = [locator];
       this.attributes.metatrafficUnicastLocatorList = [locator];
@@ -293,16 +293,29 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       instanceHandle: writerGuid,
     });
 
-    await this.sendChanges(writer);
+    await this.sendMetatrafficChanges(writer);
   }
 
-  async sendChanges(writer: Writer): Promise<void> {
+  async sendDefaultChanges(writer: Writer): Promise<void> {
     const promises: Promise<void>[] = [];
     for (const participant of this._participants.values()) {
       const readers = participant.remoteReadersForWriterId(writer.attributes.entityId);
       for (const reader of readers) {
         promises.push(
           this.sendChangesTo(reader, writer, participant.attributes.defaultUnicastLocatorList),
+        );
+      }
+    }
+    await Promise.all(promises);
+  }
+
+  async sendMetatrafficChanges(writer: Writer): Promise<void> {
+    const promises: Promise<void>[] = [];
+    for (const participant of this._participants.values()) {
+      const readers = participant.remoteReadersForWriterId(writer.attributes.entityId);
+      for (const reader of readers) {
+        promises.push(
+          this.sendChangesTo(reader, writer, participant.attributes.metatrafficUnicastLocatorList),
         );
       }
     }
@@ -391,12 +404,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       ),
     );
 
-    // Send this message as a UDP packet
     this._log?.debug?.(
-      `sending ${changes.length} change(s) (${msg.size} bytes), reader=${uint32ToHex(
+      `sending ${changes.length} change(s) (${msg.size} bytes), reader=${this.readerName(
         readerEntityId,
-      )}, writer=${uint32ToHex(writerEntityId)}`,
+      )}, writer=${this.writerName(writerEntityId)}`,
     );
+
+    // Send this message as a UDP packet
     await sendMessageToUdp(msg, srcSocket, locators);
   }
 
@@ -445,7 +459,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       instanceHandle: readerGuid,
     });
 
-    void this.sendChanges(writer);
+    void this.sendMetatrafficChanges(writer);
 
     return readerEntityId;
   }
@@ -493,7 +507,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       instanceHandle: readerGuid,
     });
 
-    void this.sendChanges(writer);
+    void this.sendMetatrafficChanges(writer);
 
     return true;
   }
@@ -532,7 +546,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       instanceHandle: participantGuid,
     });
 
-    await this.sendChanges(writer);
+    await this.sendMetatrafficChanges(writer);
   }
 
   async broadcastParticipant(attributes: ParticipantAttributes): Promise<void> {
@@ -589,7 +603,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     });
 
     this._log?.debug?.(`unadvertising participant ${guidPrefix}`);
-    await this.sendChanges(writer);
+    await this.sendMetatrafficChanges(writer);
   }
 
   topicWriters(): EndpointAttributes[] {
@@ -621,6 +635,11 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const readerEntityId = reader.attributes.entityId;
     const sequenceNumSet = reader.history.heartbeatUpdate(firstAvailableSeqNumber, lastSeqNumber);
 
+    // If there are no sequence numbers to acknowledge, do not send an ACKNACK.
+    // Doing so will enter an infinite loop with FastRTPS
+    if (sequenceNumSet.base === 0n) {
+      return;
+    }
     // If the final flag is set and we have no missing sequence numbers, do not send an ACKNACK
     if (final && sequenceNumSet.empty()) {
       return;
@@ -725,6 +744,21 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     return participant.localReadersForWriterId(writerEntityId);
   }
 
+  private readerName(readerEntityId: EntityId): string {
+    const name =
+      this._subscriptions.get(readerEntityId)?.topicName ??
+      EntityIdBuiltin[readerEntityId] ??
+      EntityKind[readerEntityId & 0xff] ??
+      "(unknown)";
+    return `${name} [${uint32ToHex(readerEntityId)}]`;
+  }
+
+  private writerName(writerEntityId: EntityId): string {
+    const name =
+      EntityIdBuiltin[writerEntityId] ?? EntityKind[writerEntityId & 0xff] ?? "(unknown)";
+    return `${name} [${uint32ToHex(writerEntityId)}]`;
+  }
+
   private handleError = (err: Error): void => {
     if (this._running) {
       this._log?.warn?.(`${this.toString()} error: ${err}`);
@@ -787,11 +821,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private handleHeartbeat = (guidPrefix: GuidPrefix, heartbeat: HeartbeatView): void => {
     this._log?.debug?.(
-      `  [SUBMSG] HEARTBEAT reader=${uint32ToHex(heartbeat.readerEntityId)} writer=${uint32ToHex(
-        heartbeat.writerEntityId,
-      )} ${heartbeat.firstAvailableSeqNumber},${heartbeat.lastSeqNumber} (count=${
-        heartbeat.count
-      }, liveliness=${heartbeat.liveliness}, final=${heartbeat.final})`,
+      `  [SUBMSG] HEARTBEAT reader=${this.readerName(
+        heartbeat.readerEntityId,
+      )} writer=${this.writerName(heartbeat.writerEntityId)} seq=${
+        heartbeat.firstAvailableSeqNumber
+      },${heartbeat.lastSeqNumber} (count=${heartbeat.count}, liveliness=${
+        heartbeat.liveliness
+      }, final=${heartbeat.final})`,
     );
 
     const srcSocket = this._unicastSocket;
@@ -843,7 +879,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const gapEnd = gapList.base - 1n;
 
     this._log?.debug?.(
-      `  [SUBMSG] GAP reader=${uint32ToHex(readerEntityId)} writer=${uint32ToHex(
+      `  [SUBMSG] GAP reader=${this.readerName(readerEntityId)} writer=${this.writerName(
         writerEntityId,
       )} gapStart=${gapStart}, gapEnd=${gapEnd}, list=${gapList.toString()}`,
     );
@@ -873,9 +909,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private handleAckNack = (guidPrefix: GuidPrefix, ackNack: AckNackView): void => {
     this._log?.debug?.(
-      `  [SUBMSG] ACKNACK reader=${uint32ToHex(ackNack.readerEntityId)} writer=${uint32ToHex(
-        ackNack.writerEntityId,
-      )} ${ackNack.readerSNState.toString()}`,
+      `  [SUBMSG] ACKNACK reader=${this.readerName(
+        ackNack.readerEntityId,
+      )} writer=${this.writerName(ackNack.writerEntityId)} ${ackNack.readerSNState.toString()}`,
     );
 
     const srcSocket = this._unicastSocket;
@@ -903,7 +939,11 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
-    void this.sendChangesTo(readerView, writer, participant.attributes.defaultUnicastLocatorList);
+    void this.sendChangesTo(
+      readerView,
+      writer,
+      participant.attributes.metatrafficUnicastLocatorList,
+    );
   };
 
   private handleDataMsg = (guidPrefix: GuidPrefix, dataMsg: DataMsgView): void => {
@@ -932,7 +972,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     // Get all of our readers for this writer
     const readers = this.getReaders(readerEntityId, writerGuid);
     this._log?.debug?.(
-      `  [SUBMSG] DATA reader=${uint32ToHex(readerEntityId)} writer=${uint32ToHex(
+      `  [SUBMSG] DATA reader=${this.readerName(readerEntityId)} writer=${this.writerName(
         writerEntityId,
       )} ${data.length} bytes (seq ${sequenceNumber}) from ${writerGuid}, ${
         readers.length
@@ -1133,7 +1173,11 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       if (writer != undefined) {
         const readers = participant.remoteReadersForWriterId(EntityIdBuiltin.ParticipantWriter);
         for (const reader of readers) {
-          void this.sendChangesTo(reader, writer, participant.attributes.defaultUnicastLocatorList);
+          void this.sendChangesTo(
+            reader,
+            writer,
+            participant.attributes.metatrafficUnicastLocatorList,
+          );
         }
       }
 

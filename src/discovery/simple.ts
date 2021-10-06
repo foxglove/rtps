@@ -1,7 +1,7 @@
 import { Time } from "@foxglove/rostime";
 
 import { ParticipantAttributes } from "../ParticipantAttributes";
-import { guidParts, HistoryKind } from "../common";
+import { guidParts, HistoryKind, Locator, LocatorKind } from "../common";
 import { ParametersView } from "../messaging";
 import { EndpointAttributes } from "../routing";
 
@@ -34,14 +34,14 @@ export function parseParticipant(
 
   const [guidPrefix, entityId] = guidParts(participantGuid);
 
-  const metatrafficUnicastLocatorList =
-    metatrafficUnicastLocator != undefined ? [metatrafficUnicastLocator] : [];
-  const metatrafficMulticastLocatorList =
-    metatrafficMulticastLocator != undefined ? [metatrafficMulticastLocator] : [];
-  const defaultUnicastLocatorList =
-    defaultUnicastLocator != undefined ? [defaultUnicastLocator] : [];
-  const defaultMulticastLocatorList =
-    defaultMulticastLocator != undefined ? [defaultMulticastLocator] : [];
+  const metatrafficUnicastLocatorList = filterLocators(metatrafficUnicastLocator);
+  const metatrafficMulticastLocatorList = filterLocators(metatrafficMulticastLocator);
+  const defaultUnicastLocatorList = filterLocators(defaultUnicastLocator);
+  const defaultMulticastLocatorList = filterLocators(defaultMulticastLocator);
+
+  if (defaultUnicastLocatorList.length === 0) {
+    return undefined;
+  }
 
   return {
     timestamp,
@@ -103,4 +103,10 @@ export function parseEndpoint(
     vendorId,
     userData,
   };
+}
+
+function filterLocators(locators: Locator[]): Locator[] {
+  const udp4 = locators.filter((locator) => locator.kind === LocatorKind.UDPv4);
+  const udp6 = locators.filter((locator) => locator.kind === LocatorKind.UDPv6);
+  return udp4.concat(udp6);
 }

@@ -32,7 +32,16 @@ export class ParametersView {
       const parameterLength = reader.uint16();
       nextOffset = reader.decodedBytes + parameterLength;
       const value = getParameterValue(parameterId, parameterLength, reader);
-      this.map.set(parameterId, value);
+      if (isMultiParameter(parameterId)) {
+        let array = this.map.get(parameterId) as unknown[];
+        if (array == undefined) {
+          array = [];
+          this.map.set(parameterId, array);
+        }
+        array.push(value);
+      } else {
+        this.map.set(parameterId, value);
+      }
     }
   }
 
@@ -104,20 +113,24 @@ export class ParametersView {
     return this.map.get(ParameterId.PID_DOMAIN_ID) as number | undefined;
   }
 
-  defaultUnicastLocator(): Locator | undefined {
-    return this.map.get(ParameterId.PID_DEFAULT_UNICAST_LOCATOR) as Locator | undefined;
+  defaultUnicastLocator(): Locator[] {
+    return (this.map.get(ParameterId.PID_DEFAULT_UNICAST_LOCATOR) as Locator[] | undefined) ?? [];
   }
 
-  defaultMulticastLocator(): Locator | undefined {
-    return this.map.get(ParameterId.PID_DEFAULT_MULTICAST_LOCATOR) as Locator | undefined;
+  defaultMulticastLocator(): Locator[] {
+    return (this.map.get(ParameterId.PID_DEFAULT_MULTICAST_LOCATOR) as Locator[] | undefined) ?? [];
   }
 
-  metatrafficUnicastLocator(): Locator | undefined {
-    return this.map.get(ParameterId.PID_METATRAFFIC_UNICAST_LOCATOR) as Locator | undefined;
+  metatrafficUnicastLocator(): Locator[] {
+    return (
+      (this.map.get(ParameterId.PID_METATRAFFIC_UNICAST_LOCATOR) as Locator[] | undefined) ?? []
+    );
   }
 
-  metatrafficMulticastLocator(): Locator | undefined {
-    return this.map.get(ParameterId.PID_METATRAFFIC_MULTICAST_LOCATOR) as Locator | undefined;
+  metatrafficMulticastLocator(): Locator[] {
+    return (
+      (this.map.get(ParameterId.PID_METATRAFFIC_MULTICAST_LOCATOR) as Locator[] | undefined) ?? []
+    );
   }
 
   expectsInlineQoS(): boolean {
@@ -243,4 +256,13 @@ function getParameterValue(id: ParameterId, length: number, reader: CdrReader): 
 
 function readTime(reader: CdrReader): Time {
   return { sec: reader.int32(), nsec: reader.uint32() };
+}
+
+function isMultiParameter(parameterId: ParameterId): boolean {
+  return (
+    parameterId === ParameterId.PID_DEFAULT_UNICAST_LOCATOR ||
+    parameterId === ParameterId.PID_DEFAULT_MULTICAST_LOCATOR ||
+    parameterId === ParameterId.PID_METATRAFFIC_UNICAST_LOCATOR ||
+    parameterId === ParameterId.PID_METATRAFFIC_MULTICAST_LOCATOR
+  );
 }
