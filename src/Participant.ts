@@ -745,12 +745,17 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   private readerName(readerEntityId: EntityId): string {
-    const name = this._subscriptions.get(readerEntityId)?.topicName ?? EntityIdBuiltin[readerEntityId] ?? EntityKind[readerEntityId & 0xff] ?? "(unknown)";
+    const name =
+      this._subscriptions.get(readerEntityId)?.topicName ??
+      EntityIdBuiltin[readerEntityId] ??
+      EntityKind[readerEntityId & 0xff] ??
+      "(unknown)";
     return `${name} [${uint32ToHex(readerEntityId)}]`;
   }
 
   private writerName(writerEntityId: EntityId): string {
-    const name = EntityIdBuiltin[writerEntityId] ?? EntityKind[writerEntityId & 0xff] ?? "(unknown)";
+    const name =
+      EntityIdBuiltin[writerEntityId] ?? EntityKind[writerEntityId & 0xff] ?? "(unknown)";
     return `${name} [${uint32ToHex(writerEntityId)}]`;
   }
 
@@ -816,11 +821,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private handleHeartbeat = (guidPrefix: GuidPrefix, heartbeat: HeartbeatView): void => {
     this._log?.debug?.(
-      `  [SUBMSG] HEARTBEAT reader=${this.readerName(heartbeat.readerEntityId)} writer=${this.writerName(
-        heartbeat.writerEntityId,
-      )} seq=${heartbeat.firstAvailableSeqNumber},${heartbeat.lastSeqNumber} (count=${
-        heartbeat.count
-      }, liveliness=${heartbeat.liveliness}, final=${heartbeat.final})`,
+      `  [SUBMSG] HEARTBEAT reader=${this.readerName(
+        heartbeat.readerEntityId,
+      )} writer=${this.writerName(heartbeat.writerEntityId)} seq=${
+        heartbeat.firstAvailableSeqNumber
+      },${heartbeat.lastSeqNumber} (count=${heartbeat.count}, liveliness=${
+        heartbeat.liveliness
+      }, final=${heartbeat.final})`,
     );
 
     const srcSocket = this._unicastSocket;
@@ -902,9 +909,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private handleAckNack = (guidPrefix: GuidPrefix, ackNack: AckNackView): void => {
     this._log?.debug?.(
-      `  [SUBMSG] ACKNACK reader=${this.readerName(ackNack.readerEntityId)} writer=${this.writerName(
-        ackNack.writerEntityId,
-      )} ${ackNack.readerSNState.toString()}`,
+      `  [SUBMSG] ACKNACK reader=${this.readerName(
+        ackNack.readerEntityId,
+      )} writer=${this.writerName(ackNack.writerEntityId)} ${ackNack.readerSNState.toString()}`,
     );
 
     const srcSocket = this._unicastSocket;
@@ -932,7 +939,11 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
-    void this.sendChangesTo(readerView, writer, participant.attributes.metatrafficUnicastLocatorList);
+    void this.sendChangesTo(
+      readerView,
+      writer,
+      participant.attributes.metatrafficUnicastLocatorList,
+    );
   };
 
   private handleDataMsg = (guidPrefix: GuidPrefix, dataMsg: DataMsgView): void => {
@@ -1162,7 +1173,11 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       if (writer != undefined) {
         const readers = participant.remoteReadersForWriterId(EntityIdBuiltin.ParticipantWriter);
         for (const reader of readers) {
-          void this.sendChangesTo(reader, writer, participant.attributes.metatrafficUnicastLocatorList);
+          void this.sendChangesTo(
+            reader,
+            writer,
+            participant.attributes.metatrafficUnicastLocatorList,
+          );
         }
       }
 
