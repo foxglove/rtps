@@ -932,7 +932,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
-    void this.sendChangesTo(readerView, writer, participant.attributes.defaultUnicastLocatorList);
+    void this.sendChangesTo(readerView, writer, participant.attributes.metatrafficUnicastLocatorList);
   };
 
   private handleDataMsg = (guidPrefix: GuidPrefix, dataMsg: DataMsgView): void => {
@@ -1162,7 +1162,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       if (writer != undefined) {
         const readers = participant.remoteReadersForWriterId(EntityIdBuiltin.ParticipantWriter);
         for (const reader of readers) {
-          void this.sendChangesTo(reader, writer, participant.attributes.defaultUnicastLocatorList);
+          void this.sendChangesTo(reader, writer, participant.attributes.metatrafficUnicastLocatorList);
         }
       }
 
