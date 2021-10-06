@@ -38,7 +38,7 @@ export function matchLocalSubscription(
 
   const readerGuid = makeGuid(localAttributes.guidPrefix, readerEntityId);
   log?.info?.(
-    `Creating reader ${readerGuid} -> ${writerView.guid()} for ${subscription.topicName}`,
+    `creating reader ${readerGuid} -> ${writerView.guid()} for ${subscription.topicName}`,
   );
 
   const reader = new Reader({
