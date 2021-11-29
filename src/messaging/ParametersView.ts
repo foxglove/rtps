@@ -25,15 +25,16 @@ export class ParametersView {
   constructor(reader: CdrReader) {
     this.map = new Map<ParameterId, unknown>();
 
+    const byteLength = reader.byteLength;
     let nextOffset = reader.decodedBytes;
-    while (nextOffset < reader.data.byteLength) {
+    while (nextOffset < byteLength) {
       reader.seekTo(nextOffset);
       const parameterId = reader.uint16();
       const parameterLength = reader.uint16();
       nextOffset = reader.decodedBytes + parameterLength;
       const value = getParameterValue(parameterId, parameterLength, reader);
       if (isMultiParameter(parameterId)) {
-        let array = this.map.get(parameterId) as unknown[];
+        let array = this.map.get(parameterId) as unknown[] | undefined;
         if (array == undefined) {
           array = [];
           this.map.set(parameterId, array);
@@ -134,7 +135,7 @@ export class ParametersView {
   }
 
   expectsInlineQoS(): boolean {
-    return (this.map.get(ParameterId.PID_EXPECTS_INLINE_QOS) as boolean) ?? false;
+    return (this.map.get(ParameterId.PID_EXPECTS_INLINE_QOS) as boolean | undefined) ?? false;
   }
 
   static FromCdr(serializedData: Uint8Array): ParametersView | undefined {

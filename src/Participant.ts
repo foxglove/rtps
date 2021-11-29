@@ -966,15 +966,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     serializedData: Uint8Array,
   ): void => {
     const writerGuid = makeGuid(guidPrefix, writerEntityId);
-    const sequenceNumber = writerSeqNumber;
-    const data = serializedData;
 
     // Get all of our readers for this writer
     const readers = this.getReaders(readerEntityId, writerGuid);
     this._log?.debug?.(
       `  [SUBMSG] DATA reader=${this.readerName(readerEntityId)} writer=${this.writerName(
         writerEntityId,
-      )} ${data.length} bytes (seq ${sequenceNumber}) from ${writerGuid}, ${
+      )} ${serializedData.length} bytes (seq ${writerSeqNumber}) from ${writerGuid}, ${
         readers.length
       } reader(s)`,
     );
@@ -1022,8 +1020,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         timestamp,
         kind: ChangeKind.Alive,
         writerGuid,
-        sequenceNumber,
-        data,
+        sequenceNumber: writerSeqNumber,
+        data: serializedData,
         instanceHandle,
       });
     }
