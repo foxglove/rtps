@@ -1182,7 +1182,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       // Send preemptive heartbeats for participant readers
       void this.sendInitialHeartbeats(participant);
     } else {
-      this._log?.info?.(`updating participant ${guidPrefix}`);
+      this._log?.debug?.(`updating participant ${guidPrefix}`);
       participant.update(participantData);
     }
 
