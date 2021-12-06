@@ -442,6 +442,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const parameters = new Parameters();
     parameters.topicName(opts.topicName);
     parameters.typeName(opts.typeName);
+    parameters.durability(opts.durability);
     parameters.reliability(opts.reliability);
     parameters.history(opts.history);
     parameters.protocolVersion(this.attributes.protocolVersion);
