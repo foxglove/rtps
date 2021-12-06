@@ -72,15 +72,15 @@ describe("MessageView", () => {
     expect(dataMsg.serializedData[1]).toEqual(3);
     expect(dataMsg.serializedData[2]).toEqual(0);
     expect(dataMsg.serializedData[3]).toEqual(0);
-    expect(dataMsg.serializedData).toHaveLength(224);
-    expect(dataMsg.serializedData).toEqual(data.slice(56, 56 + 224));
+    expect(dataMsg.serializedData).toHaveLength(228);
+    expect(dataMsg.serializedData).toEqual(data.slice(56, 56 + 228));
     expect(dataMsg.effectiveTimestamp).toEqual({ sec: 1625943731, nsec: 1222751420 });
 
     let params = ParametersView.FromCdr(dataMsg.serializedData)!;
     expect(params).toBeDefined();
-    expect(params.allParameters().size).toEqual(11);
+    expect(params.allParameters().size).toEqual(12);
     params = ParametersView.FromCdr(dataMsg.serializedData)!;
-    expect(params.allParameters().size).toEqual(11);
+    expect(params.allParameters().size).toEqual(12);
 
     const allParams = params.allParameters();
     const userData = allParams.get(ParameterId.PID_USER_DATA) as Uint8Array;

@@ -83,7 +83,7 @@ export class DataMsgView extends SubMessageView {
   }
 
   get serializedData(): Uint8Array {
-    const payloadLength = this.octetsToNextHeader - 24;
+    const payloadLength = this.octetsToNextHeader - 20;
     return new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset + 24, payloadLength);
   }
 }
