@@ -17,4 +17,5 @@ overrides:
       project: [./tsconfig.json, ./tsconfig.dts.json, ./tsconfig.examples.json]
     rules:
       "@typescript-eslint/restrict-template-expressions": off
+      "@foxglove/no-boolean-parameters": off
       "no-warning-comments": 0

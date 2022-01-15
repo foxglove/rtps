@@ -56,6 +56,7 @@ import {
 import {
   DataFragments,
   EndpointAttributes,
+  EndpointAttributesWithTopic,
   livelinessPayload,
   matchLocalSubscription,
   Reader,
@@ -261,8 +262,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this._writers.clear();
     this._subscriptions.clear();
 
-    this._multicastSocket?.close();
-    this._unicastSocket?.close();
+    void this._multicastSocket?.close();
+    void this._unicastSocket?.close();
     this.attributes.defaultUnicastLocatorList = [];
     this.attributes.defaultMulticastLocatorList = [];
     this.attributes.metatrafficUnicastLocatorList = [];
@@ -607,12 +608,12 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     await this.sendMetatrafficChanges(writer);
   }
 
-  topicWriters(): EndpointAttributes[] {
-    const endpoints: EndpointAttributes[] = [];
+  topicWriters(): EndpointAttributesWithTopic[] {
+    const endpoints: EndpointAttributesWithTopic[] = [];
     for (const participant of this._participants.values()) {
       for (const writer of participant.remoteWriters.values()) {
-        if (writer.attributes.topicName != undefined) {
-          endpoints.push(writer.attributes);
+        if (writer.attributes.topicName != undefined && writer.attributes.typeName != undefined) {
+          endpoints.push(writer.attributes as EndpointAttributesWithTopic);
         }
       }
     }

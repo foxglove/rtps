@@ -21,3 +21,8 @@ export type EndpointAttributes = {
   vendorId: VendorId;
   userData?: string;
 };
+
+export type EndpointAttributesWithTopic = EndpointAttributes & {
+  topicName: string;
+  typeName: string;
+};
