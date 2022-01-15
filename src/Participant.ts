@@ -262,8 +262,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this._writers.clear();
     this._subscriptions.clear();
 
-    this._multicastSocket?.close();
-    this._unicastSocket?.close();
+    void this._multicastSocket?.close();
+    void this._unicastSocket?.close();
     this.attributes.defaultUnicastLocatorList = [];
     this.attributes.defaultMulticastLocatorList = [];
     this.attributes.metatrafficUnicastLocatorList = [];
