@@ -1,7 +1,7 @@
 import { Time } from "@foxglove/rostime";
 
 import { ParticipantAttributes } from "../ParticipantAttributes";
-import { guidParts, HistoryKind, Locator, LocatorKind } from "../common";
+import { Durability, guidParts, HistoryKind, Locator, LocatorKind } from "../common";
 import { ParametersView } from "../messaging";
 import { EndpointAttributes } from "../routing";
 
@@ -71,6 +71,7 @@ export function parseEndpoint(
 
   const topicName = params.topicName();
   const typeName = params.typeName();
+  const durability = params.durability() ?? Durability.Volatile;
   const reliability = params.reliability();
   const history = params.history() ?? { kind: HistoryKind.KeepLast, depth: 1 };
   const protocolVersion = params.protocolVersion();
@@ -97,6 +98,7 @@ export function parseEndpoint(
     entityId,
     topicName,
     typeName,
+    durability,
     reliability,
     history,
     protocolVersion,

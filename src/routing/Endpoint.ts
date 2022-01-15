@@ -1,6 +1,7 @@
 import { Time } from "@foxglove/rostime";
 
 import {
+  Durability,
   EntityId,
   GuidPrefix,
   HistoryAndDepth,
@@ -15,6 +16,7 @@ export type EndpointAttributes = {
   entityId: EntityId;
   topicName?: string;
   typeName?: string;
+  durability: Durability;
   reliability: Readonly<ReliabilityAndMaxBlockingTime>;
   history: Readonly<HistoryAndDepth>;
   protocolVersion: Readonly<ProtocolVersion>;
