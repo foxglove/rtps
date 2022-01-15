@@ -13,11 +13,13 @@ import {
   HistoryAndDepth,
   SequenceNumber,
   makeGuid,
+  Durability,
 } from "./common";
 import { DataFragments, Reader } from "./routing";
 import { ReaderView } from "./routing/ReaderView";
 import { WriterView } from "./routing/WriterView";
 
+const BUILTIN_DURABILITY = Durability.TransientLocal;
 const BUILTIN_RELIABILITY: ReliabilityAndMaxBlockingTime = {
   kind: Reliability.Reliable,
   maxBlockingTime: fromMillis(100),
@@ -172,6 +174,7 @@ export class ParticipantView {
       const readerView = new ReaderView({
         guidPrefix: this.attributes.guidPrefix,
         entityId: readerEntityId,
+        durability: BUILTIN_DURABILITY,
         reliability: BUILTIN_RELIABILITY,
         history: BUILTIN_HISTORY,
         protocolVersion: this.attributes.protocolVersion,
@@ -190,6 +193,7 @@ export class ParticipantView {
       const writerView = new WriterView({
         guidPrefix: this.attributes.guidPrefix,
         entityId: writerEntityId,
+        durability: BUILTIN_DURABILITY,
         reliability: BUILTIN_RELIABILITY,
         history: BUILTIN_HISTORY,
         protocolVersion: this.attributes.protocolVersion,
@@ -208,6 +212,7 @@ export class ParticipantView {
           new Reader({
             guidPrefix: local.attributes.guidPrefix,
             entityId: readerEntityId,
+            durability: BUILTIN_DURABILITY,
             reliability: BUILTIN_RELIABILITY,
             history: BUILTIN_HISTORY,
             protocolVersion: this.attributes.protocolVersion,

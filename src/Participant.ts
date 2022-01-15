@@ -7,6 +7,7 @@ import { ParticipantView } from "./ParticipantView";
 import {
   BuiltinEndpointSet,
   ChangeKind,
+  Durability,
   EntityId,
   EntityIdBuiltin,
   EntityKind,
@@ -723,6 +724,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const writer = new Writer({
       guidPrefix: this.attributes.guidPrefix,
       entityId: writerEntityId,
+      durability: Durability.TransientLocal,
       reliability: { kind: Reliability.Reliable, maxBlockingTime: fromMillis(100) },
       history: { kind: HistoryKind.KeepLast, depth: 1 },
       protocolVersion: this.attributes.protocolVersion,

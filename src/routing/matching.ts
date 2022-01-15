@@ -46,6 +46,7 @@ export function matchLocalSubscription(
     entityId: readerEntityId,
     topicName: subscription.topicName,
     typeName: subscription.typeName,
+    durability: subscription.durability,
     reliability: subscription.reliability,
     history: subscription.history,
     protocolVersion: localAttributes.protocolVersion,
