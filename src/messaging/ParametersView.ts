@@ -15,6 +15,7 @@ import {
   HistoryAndDepth,
   ProtocolVersion,
   ReliabilityAndMaxBlockingTime,
+  fractionToNanoseconds,
 } from "../common";
 
 const textDecoder = new TextDecoder();
@@ -256,7 +257,7 @@ function getParameterValue(id: ParameterId, length: number, reader: CdrReader): 
 }
 
 function readTime(reader: CdrReader): Time {
-  return { sec: reader.int32(), nsec: reader.uint32() };
+  return { sec: reader.int32(), nsec: fractionToNanoseconds(reader.uint32()) };
 }
 
 function isMultiParameter(parameterId: ParameterId): boolean {

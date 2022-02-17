@@ -1,7 +1,7 @@
 import { Participant, selectIPv4, Durability, Reliability, HistoryKind } from "../src";
 import { getNetworkInterfaces, UdpSocketNode } from "../src/nodejs";
 
-const DURATION_INFINITE = { sec: 0x7fffffff, nsec: 0xffffffff };
+const DURATION_INFINITE = { sec: 0x7fffffff, nsec: 999999999 };
 
 async function main() {
   const address = selectIPv4(getNetworkInterfaces());

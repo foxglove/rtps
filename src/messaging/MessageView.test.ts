@@ -55,7 +55,7 @@ describe("MessageView", () => {
     expect(infoTs.submessageId).toEqual(SubMessageId.INFO_TS);
     expect(infoTs.littleEndian).toEqual(true);
     expect(infoTs.octetsToNextHeader).toEqual(8);
-    expect(infoTs.timestamp).toEqual({ sec: 1625943731, nsec: 1222751420 });
+    expect(infoTs.timestamp).toEqual({ sec: 1625943731, nsec: 284694000 });
 
     const dataMsg = subMessages[1]! as DataMsgView;
     expect(dataMsg instanceof DataMsgView).toEqual(true);
@@ -74,7 +74,7 @@ describe("MessageView", () => {
     expect(dataMsg.serializedData[3]).toEqual(0);
     expect(dataMsg.serializedData).toHaveLength(228);
     expect(dataMsg.serializedData).toEqual(data.slice(56, 56 + 228));
-    expect(dataMsg.effectiveTimestamp).toEqual({ sec: 1625943731, nsec: 1222751420 });
+    expect(dataMsg.effectiveTimestamp).toEqual({ sec: 1625943731, nsec: 284694000 });
 
     let params = ParametersView.FromCdr(dataMsg.serializedData)!;
     expect(params).toBeDefined();
@@ -169,7 +169,7 @@ describe("MessageView", () => {
     });
     expect(allParams.get(ParameterId.PID_RELIABILITY)).toEqual({
       kind: Reliability.Reliable,
-      maxBlockingTime: { nsec: 4294967295, sec: 2147483647 },
+      maxBlockingTime: { nsec: 999999999, sec: 2147483647 },
     });
     expect(allParams.get(ParameterId.PID_LIFESPAN)).toEqual({ sec: 10, nsec: 0 });
     expect(allParams.get(ParameterId.PID_HISTORY)).toEqual({

@@ -11,4 +11,5 @@ export * from "./Locator";
 export * from "./LoggerService";
 export * from "./SequenceNumber";
 export * from "./SequenceNumberSet";
+export * from "./time";
 export * from "./types";

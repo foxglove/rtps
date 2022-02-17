@@ -12,6 +12,7 @@ import {
   HistoryAndDepth,
   ProtocolVersion,
   ReliabilityAndMaxBlockingTime,
+  nanosecondsToFraction,
 } from "../common";
 
 const textEncoder = new TextEncoder();
@@ -50,7 +51,7 @@ export class Parameters {
     this.writePrefix(ParameterId.PID_RELIABILITY, length);
     this.writer.uint32(value.kind);
     this.writer.int32(value.maxBlockingTime.sec);
-    this.writer.uint32(value.maxBlockingTime.nsec);
+    this.writer.uint32(nanosecondsToFraction(value.maxBlockingTime.nsec));
     this.writer.align(4);
   }
 
@@ -106,7 +107,7 @@ export class Parameters {
     const length = 8;
     this.writePrefix(ParameterId.PID_PARTICIPANT_LEASE_DURATION, length);
     this.writer.int32(value.sec);
-    this.writer.uint32(value.nsec);
+    this.writer.uint32(nanosecondsToFraction(value.nsec));
     this.writer.align(4);
   }
 
