@@ -1,7 +1,7 @@
 import { CdrReader } from "@foxglove/cdr";
 import { Time } from "@foxglove/rostime";
-import { fractionToNanoseconds } from ".";
 
+import { fractionToNanoseconds } from ".";
 import { HistoryKind } from "./enums";
 
 export class DurabilityService {
