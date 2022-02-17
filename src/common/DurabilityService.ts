@@ -1,5 +1,6 @@
 import { CdrReader } from "@foxglove/cdr";
 import { Time } from "@foxglove/rostime";
+import { fractionToNanoseconds } from ".";
 
 import { HistoryKind } from "./enums";
 
@@ -14,7 +15,7 @@ export class DurabilityService {
   ) {}
 
   static fromCDR(reader: CdrReader): DurabilityService {
-    const leaseDuration = { sec: reader.int32(), nsec: reader.uint32() };
+    const leaseDuration = { sec: reader.int32(), nsec: fractionToNanoseconds(reader.uint32()) };
     const historyKind = reader.uint32() as HistoryKind;
     const historyDepth = reader.int32();
     const maxSamples = reader.int32();
