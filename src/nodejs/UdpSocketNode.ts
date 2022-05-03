@@ -1,7 +1,16 @@
 import dgram from "dgram";
 import EventEmitter from "eventemitter3";
 
-import { UdpAddress, UdpBindOptions, UdpSocket, UdpSocketEvents } from "../transport";
+import {
+  UdpAddress,
+  UdpBindOptions,
+  UdpSocket,
+  UdpSocketEvents,
+  UdpSocketOptions,
+} from "../transport";
+
+const SEND_BUFFER_SIZE = 262144;
+const RECV_BUFFER_SIZE = 26214400;
 
 export class UdpSocketNode extends EventEmitter<UdpSocketEvents> implements UdpSocket {
   private _socket: dgram.Socket;
@@ -92,7 +101,17 @@ export class UdpSocketNode extends EventEmitter<UdpSocketEvents> implements UdpS
     this._socket.setMulticastTTL(ttl);
   }
 
-  static async Create(this: void): Promise<UdpSocket> {
-    return new UdpSocketNode(dgram.createSocket({ type: "udp4", reuseAddr: true }));
+  static async Create(options?: UdpSocketOptions): Promise<UdpSocket> {
+    return new UdpSocketNode(
+      dgram.createSocket({
+        ...{
+          type: "udp4",
+          reuseAddr: true,
+          sendBufferSize: SEND_BUFFER_SIZE,
+          recvBufferSize: RECV_BUFFER_SIZE,
+        },
+        ...options,
+      }),
+    );
   }
 }

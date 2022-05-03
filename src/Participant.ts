@@ -79,6 +79,7 @@ import {
   UdpRemoteInfo,
   UdpSocket,
   UdpSocketCreate,
+  UdpSocketOptions,
 } from "./transport";
 
 export type ParticipantTuning = {
@@ -109,6 +110,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private readonly _addresses: ReadonlyArray<string>;
   private readonly _udpSocketCreate: UdpSocketCreate;
+  private readonly _udpSocketOptions: UdpSocketOptions | undefined;
   private readonly _log?: LoggerService;
   private readonly _participants = new Map<GuidPrefix, ParticipantView>();
   private readonly _writers = new Map<EntityId, Writer>();
@@ -144,6 +146,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     domainId?: number;
     guidPrefix?: GuidPrefix;
     udpSocketCreate: UdpSocketCreate;
+    udpSocketOptions?: UdpSocketOptions;
     log?: LoggerService;
     protocolVersion?: ProtocolVersion;
     vendorId?: VendorId;
@@ -176,6 +179,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     this._addresses = options.addresses;
     this._udpSocketCreate = options.udpSocketCreate;
+    this._udpSocketOptions = options.udpSocketOptions;
     this._log = options.log;
     this._multicastLocator = locatorFromUdpAddress({
       address: MULTICAST_IPv4,
@@ -206,6 +210,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this._multicastSocket = await createMulticastUdpSocket(
       discoveryMulticastPort(this.attributes.domainId),
       this._udpSocketCreate,
+      this._udpSocketOptions,
       this.handleUdpMessage,
       this.handleError,
     );
@@ -220,6 +225,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this._unicastSocket = await createUdpSocket(
       undefined,
       this._udpSocketCreate,
+      this._udpSocketOptions,
       this.handleUdpMessage,
       this.handleError,
     );

@@ -1,6 +1,12 @@
 import { Locator, LocatorKind, ipv6ToBytes, ipv4ToBytes } from "../common";
 import { Message } from "../messaging";
-import { UdpAddress, UdpRemoteInfo, UdpSocket, UdpSocketCreate } from "./networkTypes";
+import {
+  UdpAddress,
+  UdpRemoteInfo,
+  UdpSocket,
+  UdpSocketCreate,
+  UdpSocketOptions,
+} from "./networkTypes";
 
 export const MULTICAST_IPv4 = "239.255.0.1";
 
@@ -64,10 +70,11 @@ export async function sendMessageToUdp(
 export async function createUdpSocket(
   address: string | undefined,
   udpSocketCreate: UdpSocketCreate,
+  udpSocketOptions: UdpSocketOptions | undefined,
   messageHandler: (data: Uint8Array, rinfo: UdpRemoteInfo) => void,
   errorHandler: (err: Error) => void,
 ): Promise<UdpSocket> {
-  const socket = await udpSocketCreate({ type: "udp4" });
+  const socket = await udpSocketCreate({ ...{ type: "udp4" }, ...udpSocketOptions });
   socket.on("error", errorHandler);
   socket.on("message", messageHandler);
   await socket.bind({ address });
@@ -77,10 +84,11 @@ export async function createUdpSocket(
 export async function createMulticastUdpSocket(
   port: number,
   udpSocketCreate: UdpSocketCreate,
+  udpSocketOptions: UdpSocketOptions | undefined,
   messageHandler: (data: Uint8Array, rinfo: UdpRemoteInfo) => void,
   errorHandler: (err: Error) => void,
 ): Promise<UdpSocket> {
-  const socket = await udpSocketCreate({ type: "udp4" });
+  const socket = await udpSocketCreate({ ...{ type: "udp4" }, ...udpSocketOptions });
   socket.on("error", errorHandler);
   socket.on("message", messageHandler);
   await socket.bind({ port });
