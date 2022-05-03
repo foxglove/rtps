@@ -1093,33 +1093,57 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
+    const {
+      effectiveTimestamp,
+      readerEntityId,
+      writerEntityId,
+      writerSeqNumber,
+      sampleSize,
+      fragmentSize,
+      fragmentStartingNum,
+      fragments,
+    } = dataFrag;
+
     const fragmentTracker = participant.getFragments(
-      dataFrag.writerEntityId,
-      dataFrag.writerSeqNumber,
-      dataFrag.sampleSize,
-      dataFrag.fragmentSize,
+      writerEntityId,
+      writerSeqNumber,
+      sampleSize,
+      fragmentSize,
     );
 
-    const fragments = dataFrag.fragments;
+    let recvBytes = 0;
     for (let i = 0; i < fragments.length; i++) {
       const fragment = fragments[i]!;
-      const index = dataFrag.fragmentStartingNum + i - 1;
+      const index = fragmentStartingNum + i - 1;
       fragmentTracker.addFragment(index, fragment);
+      recvBytes += fragment.length;
     }
+
+    const currentFragments = fragmentTracker.fragmentCount - fragmentTracker.remainingFragments;
+    this._log?.debug?.(
+      `  [SUBMSG] DATA_FRAG writer=${this.writerName(
+        writerEntityId,
+      )} fragmentStartingNum=${fragmentStartingNum}, fragments=${
+        fragments.length
+      }, ${recvBytes} bytes frags=${currentFragments}/${fragmentTracker.fragmentCount} [${(
+        (currentFragments / fragmentTracker.fragmentCount) *
+        100
+      ).toFixed(1)}%] (seq ${writerSeqNumber}) from ${makeGuid(guidPrefix, writerEntityId)}`,
+    );
 
     // Check if the complete DATA message is available
     const serializedData = fragmentTracker.data();
     if (serializedData != undefined) {
       // Stop tracking the individual fragments of this message
-      participant.removeFragments(dataFrag.writerEntityId, dataFrag.writerSeqNumber);
+      participant.removeFragments(writerEntityId, writerSeqNumber);
 
       // Handle the assembled data message
       this.handleData(
-        dataFrag.effectiveTimestamp ?? fromDate(new Date()),
+        effectiveTimestamp ?? fromDate(new Date()),
         guidPrefix,
-        dataFrag.readerEntityId,
-        dataFrag.writerEntityId,
-        dataFrag.writerSeqNumber,
+        readerEntityId,
+        writerEntityId,
+        writerSeqNumber,
         serializedData,
       );
     }
