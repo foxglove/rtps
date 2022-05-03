@@ -804,7 +804,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private handleError = (err: Error): void => {
     if (this._running) {
-      this._log?.warn?.(`${this.toString()} error: ${err}`);
+      this._log?.warn?.(`[ERROR][${this.name}] ${err}`);
       this.emit("error", err);
     }
   };
