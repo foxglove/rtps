@@ -10,7 +10,7 @@ describe("Participant", () => {
     const participant = new Participant({
       name: "test",
       addresses: [address],
-      udpSocketCreate: UdpSocketNode.Create,
+      udpSocketCreate: async () => await UdpSocketNode.Create(),
       // log: console,
     });
     await participant.start();

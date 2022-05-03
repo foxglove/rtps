@@ -1,5 +1,5 @@
 import { CdrReader } from "@foxglove/cdr";
-import { areEqual, fromDate, fromMillis, Time } from "@foxglove/rostime";
+import { areEqual, fromDate, fromMillis, Time, toNanoSec } from "@foxglove/rostime";
 import { EventEmitter } from "eventemitter3";
 
 import { ParticipantAttributes } from "./ParticipantAttributes";
@@ -50,7 +50,9 @@ import {
   HeartbeatFragView,
   HeartbeatView,
   InfoDst,
+  InfoDstView,
   InfoTs,
+  InfoTsView,
   NackFrag,
   NackFragView,
 } from "./messaging/submessages";
@@ -79,6 +81,7 @@ import {
   UdpRemoteInfo,
   UdpSocket,
   UdpSocketCreate,
+  UdpSocketOptions,
 } from "./transport";
 
 export type ParticipantTuning = {
@@ -109,6 +112,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private readonly _addresses: ReadonlyArray<string>;
   private readonly _udpSocketCreate: UdpSocketCreate;
+  private readonly _udpSocketOptions: UdpSocketOptions | undefined;
   private readonly _log?: LoggerService;
   private readonly _participants = new Map<GuidPrefix, ParticipantView>();
   private readonly _writers = new Map<EntityId, Writer>();
@@ -144,6 +148,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     domainId?: number;
     guidPrefix?: GuidPrefix;
     udpSocketCreate: UdpSocketCreate;
+    udpSocketOptions?: UdpSocketOptions;
     log?: LoggerService;
     protocolVersion?: ProtocolVersion;
     vendorId?: VendorId;
@@ -176,6 +181,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     this._addresses = options.addresses;
     this._udpSocketCreate = options.udpSocketCreate;
+    this._udpSocketOptions = options.udpSocketOptions;
     this._log = options.log;
     this._multicastLocator = locatorFromUdpAddress({
       address: MULTICAST_IPv4,
@@ -206,6 +212,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this._multicastSocket = await createMulticastUdpSocket(
       discoveryMulticastPort(this.attributes.domainId),
       this._udpSocketCreate,
+      this._udpSocketOptions,
       this.handleUdpMessage,
       this.handleError,
     );
@@ -220,6 +227,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this._unicastSocket = await createUdpSocket(
       undefined,
       this._udpSocketCreate,
+      this._udpSocketOptions,
       this.handleUdpMessage,
       this.handleError,
     );
@@ -636,7 +644,40 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     }
 
     const readerEntityId = reader.attributes.entityId;
-    const sequenceNumSet = reader.history.heartbeatUpdate(firstAvailableSeqNumber, lastSeqNumber);
+    const participant = this._participants.get(guidPrefix);
+    if (participant == undefined) {
+      return;
+    }
+
+    // Check if we are missing fragments for any of the sequence numbers
+    let endSeq = firstAvailableSeqNumber;
+    for (endSeq = firstAvailableSeqNumber; endSeq <= lastSeqNumber; endSeq++) {
+      const fragments = participant.tryGetFragments(writerEntityId, endSeq);
+      if (fragments != undefined) {
+        // We are missing one or more fragments for this sequence number. We
+        // can't positively or negatively acknowledge this seqnum, so instead
+        // send a NackFrag for it and make sure our AckNack sequence set ends
+        // before this seqnum
+        void this.sendNackFragTo(
+          guidPrefix,
+          fragments.fragmentCount,
+          readerEntityId,
+          writerEntityId,
+          endSeq,
+          fragments,
+          locators,
+        );
+        endSeq--;
+        break;
+      }
+    }
+
+    if (endSeq < firstAvailableSeqNumber) {
+      // No sequence numbers need AckNack (only sending NackFrag)
+      return;
+    }
+
+    const sequenceNumSet = reader.history.heartbeatUpdate(firstAvailableSeqNumber, endSeq);
 
     // If there are no sequence numbers to acknowledge, do not send an ACKNACK.
     // Doing so will enter an infinite loop with FastRTPS
@@ -669,7 +710,10 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private async sendNackFragTo(
     guidPrefix: GuidPrefix,
-    heartbeatFrag: HeartbeatFragView,
+    lastFragmentNumber: number,
+    readerEntityId: EntityId,
+    writerEntityId: EntityId,
+    writerSeqNumber: SequenceNumber,
     fragmentTracker: DataFragments,
     locators: Locator[],
   ): Promise<void> {
@@ -678,13 +722,18 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
-    const missing = Array.from(fragmentTracker.missingFragments());
-    const base = missing[0] ?? 1;
-    const numBits = heartbeatFrag.lastFragmentNumber - base;
+    const missing = Array.from(fragmentTracker.missingFragments(lastFragmentNumber));
+    if (missing.length === 0) {
+      return;
+    }
+
+    const base = missing[0]!;
+    const lastMissing = missing[missing.length - 1]!;
+    const numBits = lastMissing - base;
     const state = new FragmentNumberSet(base, numBits);
     for (const idx of missing) {
       const fragmentNum = idx + 1;
-      if (fragmentNum > heartbeatFrag.lastFragmentNumber) {
+      if (fragmentNum > lastFragmentNumber) {
         break;
       }
       state.add(fragmentNum);
@@ -694,20 +743,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const msg = new Message(this.attributes);
     msg.writeSubmessage(new InfoDst(guidPrefix));
     msg.writeSubmessage(
-      new NackFrag(
-        heartbeatFrag.readerEntityId,
-        heartbeatFrag.writerEntityId,
-        heartbeatFrag.writerSeqNumber,
-        state,
-        ++fragmentTracker.count,
-      ),
+      new NackFrag(readerEntityId, writerEntityId, writerSeqNumber, state, ++fragmentTracker.count),
     );
 
     this._log?.debug?.(
-      `sending NACK_FRAG to ${makeGuid(
-        guidPrefix,
-        heartbeatFrag.writerEntityId,
-      )}, ${state.toString()}`,
+      `sending NACK_FRAG to ${makeGuid(guidPrefix, writerEntityId)} for seq ${writerSeqNumber} ${
+        state.numBits <= 16 ? state.toString() : `[...] (${state.numBits} bits)`
+      }`,
     );
     await sendMessageToUdp(msg, srcSocket, locators);
   }
@@ -765,7 +807,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
   private handleError = (err: Error): void => {
     if (this._running) {
-      this._log?.warn?.(`${this.toString()} error: ${err}`);
+      this._log?.warn?.(`[ERROR][${this.name}] ${err}`);
       this.emit("error", err);
     }
   };
@@ -784,41 +826,61 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
-    this._log?.debug?.(`received ${data.length} byte message from ${rinfo.address}:${rinfo.port}`);
     this._receivedBytes += data.length;
 
     const subMessages = message.subMessages();
+    this._log?.debug?.(
+      `received ${data.length} byte message with ${subMessages.length} submessage(s) from ${rinfo.address}:${rinfo.port}`,
+    );
     for (const msg of subMessages) {
       const dstGuidPrefix = msg.effectiveGuidPrefix;
       if (dstGuidPrefix != undefined && dstGuidPrefix !== this.attributes.guidPrefix) {
         // This is not our message
+        this._log?.debug?.(`ignoring message with unknown dstGuidPrefix ${dstGuidPrefix}`);
         continue;
       }
 
-      switch (msg.submessageId) {
-        case SubMessageId.HEARTBEAT:
-          this.handleHeartbeat(message.guidPrefix, msg as HeartbeatView);
-          break;
-        case SubMessageId.ACKNACK:
-          this.handleAckNack(message.guidPrefix, msg as AckNackView);
-          break;
-        case SubMessageId.DATA:
-          this.handleDataMsg(message.guidPrefix, msg as DataMsgView);
-          break;
-        case SubMessageId.GAP:
-          this.handleGap(message.guidPrefix, msg as GapView);
-          break;
-        case SubMessageId.DATA_FRAG:
-          this.handleDataFrag(message.guidPrefix, msg as DataFragView);
-          break;
-        case SubMessageId.HEARTBEAT_FRAG:
-          this.handleHeartbeatFrag(message.guidPrefix, msg as HeartbeatFragView);
-          break;
-        case SubMessageId.NACK_FRAG:
-          this.handleNackFrag(message.guidPrefix, msg as NackFragView);
-          break;
-        default:
-          break;
+      try {
+        switch (msg.submessageId) {
+          case SubMessageId.INFO_TS: {
+            // INFO_TS is already handled by setting effectiveTimestamp on other submessages
+            const infoTs = msg as InfoTsView;
+            this._log?.debug?.(`  [SUBMSG] INFO_TS ${toNanoSec(infoTs.timestamp)}`);
+            break;
+          }
+          case SubMessageId.INFO_DST: {
+            // INFO_DST is already handled by setting guidPrefix on other submessages
+            const infoDst = msg as InfoDstView;
+            this._log?.debug?.(`  [SUBMSG] INFO_DST ${infoDst.guidPrefix}`);
+            break;
+          }
+          case SubMessageId.HEARTBEAT:
+            this.handleHeartbeat(message.guidPrefix, msg as HeartbeatView);
+            break;
+          case SubMessageId.ACKNACK:
+            this.handleAckNack(message.guidPrefix, msg as AckNackView);
+            break;
+          case SubMessageId.DATA:
+            this.handleDataMsg(message.guidPrefix, msg as DataMsgView);
+            break;
+          case SubMessageId.GAP:
+            this.handleGap(message.guidPrefix, msg as GapView);
+            break;
+          case SubMessageId.DATA_FRAG:
+            this.handleDataFrag(message.guidPrefix, msg as DataFragView);
+            break;
+          case SubMessageId.HEARTBEAT_FRAG:
+            this.handleHeartbeatFrag(message.guidPrefix, msg as HeartbeatFragView);
+            break;
+          case SubMessageId.NACK_FRAG:
+            this.handleNackFrag(message.guidPrefix, msg as NackFragView);
+            break;
+          default:
+            this._log?.warn?.(`ignoring unhandled submessage ${msg.submessageId}`);
+            break;
+        }
+      } catch (err) {
+        this.handleError(err as Error);
       }
     }
   };
@@ -1038,33 +1100,57 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
+    const {
+      effectiveTimestamp,
+      readerEntityId,
+      writerEntityId,
+      writerSeqNumber,
+      sampleSize,
+      fragmentSize,
+      fragmentStartingNum,
+      fragments,
+    } = dataFrag;
+
     const fragmentTracker = participant.getFragments(
-      dataFrag.writerEntityId,
-      dataFrag.writerSeqNumber,
-      dataFrag.sampleSize,
-      dataFrag.fragmentSize,
+      writerEntityId,
+      writerSeqNumber,
+      sampleSize,
+      fragmentSize,
     );
 
-    const fragments = dataFrag.fragments;
+    let recvBytes = 0;
     for (let i = 0; i < fragments.length; i++) {
       const fragment = fragments[i]!;
-      const index = dataFrag.fragmentStartingNum + i - 1;
+      const index = fragmentStartingNum + i - 1;
       fragmentTracker.addFragment(index, fragment);
+      recvBytes += fragment.length;
     }
+
+    const currentFragments = fragmentTracker.fragmentCount - fragmentTracker.remainingFragments;
+    this._log?.debug?.(
+      `  [SUBMSG] DATA_FRAG writer=${this.writerName(
+        writerEntityId,
+      )} fragmentStartingNum=${fragmentStartingNum}, fragments=${
+        fragments.length
+      }, ${recvBytes} bytes frags=${currentFragments}/${fragmentTracker.fragmentCount} [${(
+        (currentFragments / fragmentTracker.fragmentCount) *
+        100
+      ).toFixed(1)}%] (seq ${writerSeqNumber}) from ${makeGuid(guidPrefix, writerEntityId)}`,
+    );
 
     // Check if the complete DATA message is available
     const serializedData = fragmentTracker.data();
     if (serializedData != undefined) {
       // Stop tracking the individual fragments of this message
-      participant.removeFragments(dataFrag.writerEntityId, dataFrag.writerSeqNumber);
+      participant.removeFragments(writerEntityId, writerSeqNumber);
 
       // Handle the assembled data message
       this.handleData(
-        dataFrag.effectiveTimestamp ?? fromDate(new Date()),
+        effectiveTimestamp ?? fromDate(new Date()),
         guidPrefix,
-        dataFrag.readerEntityId,
-        dataFrag.writerEntityId,
-        dataFrag.writerSeqNumber,
+        readerEntityId,
+        writerEntityId,
+        writerSeqNumber,
         serializedData,
       );
     }
@@ -1080,24 +1166,34 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
-    const fragmentTracker = participant.tryGetFragments(
-      heartbeatFrag.writerEntityId,
-      heartbeatFrag.writerSeqNumber,
-    );
+    const { count, lastFragmentNumber, readerEntityId, writerEntityId, writerSeqNumber } =
+      heartbeatFrag;
+
+    const fragmentTracker = participant.tryGetFragments(writerEntityId, writerSeqNumber);
     if (fragmentTracker == undefined) {
       this._log?.warn?.(
         `received HEARTBEAT_FRAG for unknown packet ${uint32ToHex(
-          heartbeatFrag.writerEntityId,
-        )} :: ${heartbeatFrag.writerSeqNumber}`,
+          writerEntityId,
+        )} :: ${writerSeqNumber}`,
       );
       return;
     }
 
-    if (!fragmentTracker.hasUpTo(heartbeatFrag.lastFragmentNumber - 1)) {
-      // One or more fragments are missing, send a NACK_FRAG
+    this._log?.debug?.(
+      `  [SUBMSG] HEARTBEAT_FRAG writer=${this.writerName(
+        writerEntityId,
+      )} lastFragmentNumber=${lastFragmentNumber} (count=${count}, seq=${writerSeqNumber})`,
+    );
+
+    // If one or more fragments are missing for the current sequence number,
+    // send a NACK_FRAG
+    if (!fragmentTracker.hasUpTo(lastFragmentNumber - 1)) {
       void this.sendNackFragTo(
         guidPrefix,
-        heartbeatFrag,
+        lastFragmentNumber,
+        readerEntityId,
+        writerEntityId,
+        writerSeqNumber,
         fragmentTracker,
         participant.attributes.metatrafficUnicastLocatorList,
       );

@@ -26,6 +26,14 @@ export type UdpBindOptions = {
   address?: string;
 };
 
+export type UdpSocketOptions = {
+  type: "udp4" | "udp6";
+  reuseAddr?: boolean | undefined;
+  ipv6Only?: boolean | undefined;
+  recvBufferSize?: number | undefined;
+  sendBufferSize?: number | undefined;
+};
+
 export interface UdpSocketEvents {
   close: () => void;
   listening: () => void;
@@ -60,5 +68,5 @@ export interface UdpSocket {
 }
 
 export interface UdpSocketCreate {
-  (options: { type: "udp4" | "udp6" }): Promise<UdpSocket>;
+  (options: UdpSocketOptions): Promise<UdpSocket>;
 }

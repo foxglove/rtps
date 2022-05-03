@@ -8,7 +8,7 @@ async function main() {
   const participant = new Participant({
     name: "listener",
     addresses: [address],
-    udpSocketCreate: UdpSocketNode.Create,
+    udpSocketCreate: async () => await UdpSocketNode.Create(),
     log: console,
   });
   await participant.start();
