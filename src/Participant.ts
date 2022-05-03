@@ -642,7 +642,40 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     }
 
     const readerEntityId = reader.attributes.entityId;
-    const sequenceNumSet = reader.history.heartbeatUpdate(firstAvailableSeqNumber, lastSeqNumber);
+    const participant = this._participants.get(guidPrefix);
+    if (participant == undefined) {
+      return;
+    }
+
+    // Check if we are missing fragments for any of the sequence numbers
+    let endSeq = firstAvailableSeqNumber;
+    for (endSeq = firstAvailableSeqNumber; endSeq <= lastSeqNumber; endSeq++) {
+      const fragments = participant.tryGetFragments(writerEntityId, endSeq);
+      if (fragments != undefined) {
+        // We are missing one or more fragments for this sequence number. We
+        // can't positively or negatively acknowledge this seqnum, so instead
+        // send a NackFrag for it and make sure our AckNack sequence set ends
+        // before this seqnum
+        void this.sendNackFragTo(
+          guidPrefix,
+          fragments.fragmentCount,
+          readerEntityId,
+          writerEntityId,
+          endSeq,
+          fragments,
+          locators,
+        );
+        endSeq--;
+        break;
+      }
+    }
+
+    if (endSeq < firstAvailableSeqNumber) {
+      // No sequence numbers need AckNack (only sending NackFrag)
+      return;
+    }
+
+    const sequenceNumSet = reader.history.heartbeatUpdate(firstAvailableSeqNumber, endSeq);
 
     // If there are no sequence numbers to acknowledge, do not send an ACKNACK.
     // Doing so will enter an infinite loop with FastRTPS
