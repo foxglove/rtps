@@ -10,6 +10,24 @@
 ...
 ```
 
+## Notes
+
+Receiving large (>256KB) messages not be possible with the default Linux networking receive buffer size of 256KB, depending on CPU speed / contention / network speed / many factors. Linux users should set the following sysctls:
+
+```
+sudo sysctl -w net.core.rmem_max=26214400
+sudo sysctl -w net.core.rmem_default=26214400
+sudo sysctl -w net.ipv4.udp_mem=26214400
+```
+
+Or permanently in `/etc/sysctl.conf`:
+
+```
+net.core.rmem_max=26214400
+net.core.rmem_default=26214400
+net.ipv4.udp_mem=26214400
+```
+
 ### Test
 
 `yarn test`

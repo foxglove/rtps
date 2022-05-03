@@ -848,11 +848,12 @@ export class Participant extends EventEmitter<ParticipantEvents> {
             this._log?.debug?.(`  [SUBMSG] INFO_TS ${toNanoSec(infoTs.timestamp)}`);
             break;
           }
-          case SubMessageId.INFO_DST:
+          case SubMessageId.INFO_DST: {
             // INFO_DST is already handled by setting guidPrefix on other submessages
             const infoDst = msg as InfoDstView;
             this._log?.debug?.(`  [SUBMSG] INFO_DST ${infoDst.guidPrefix}`);
             break;
+          }
           case SubMessageId.HEARTBEAT:
             this.handleHeartbeat(message.guidPrefix, msg as HeartbeatView);
             break;
