@@ -95,6 +95,7 @@ export class ReaderHistoryCache {
       return new SequenceNumberSet(lastSeqNumber, 0);
     }
 
+    // Record the sequence numbers of all missing entries in _sequenceToEntry
     const numBits = Math.min(1 + Number(lastSeqNumber - firstSeqNumber), 256);
     const set = new SequenceNumberSet(firstSeqNumber, numBits);
     let hasAll = true;
