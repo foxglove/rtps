@@ -834,30 +834,46 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         continue;
       }
 
-      switch (msg.submessageId) {
-        case SubMessageId.HEARTBEAT:
-          this.handleHeartbeat(message.guidPrefix, msg as HeartbeatView);
-          break;
-        case SubMessageId.ACKNACK:
-          this.handleAckNack(message.guidPrefix, msg as AckNackView);
-          break;
-        case SubMessageId.DATA:
-          this.handleDataMsg(message.guidPrefix, msg as DataMsgView);
-          break;
-        case SubMessageId.GAP:
-          this.handleGap(message.guidPrefix, msg as GapView);
-          break;
-        case SubMessageId.DATA_FRAG:
-          this.handleDataFrag(message.guidPrefix, msg as DataFragView);
-          break;
-        case SubMessageId.HEARTBEAT_FRAG:
-          this.handleHeartbeatFrag(message.guidPrefix, msg as HeartbeatFragView);
-          break;
-        case SubMessageId.NACK_FRAG:
-          this.handleNackFrag(message.guidPrefix, msg as NackFragView);
-          break;
-        default:
-          break;
+      try {
+        switch (msg.submessageId) {
+          case SubMessageId.INFO_TS: {
+            // INFO_TS is already handled by setting effectiveTimestamp on other submessages
+            const infoTs = msg as InfoTsView;
+            this._log?.debug?.(`  [SUBMSG] INFO_TS ${toNanoSec(infoTs.timestamp)}`);
+            break;
+          }
+          case SubMessageId.INFO_DST:
+            // INFO_DST is already handled by setting guidPrefix on other submessages
+            const infoDst = msg as InfoDstView;
+            this._log?.debug?.(`  [SUBMSG] INFO_DST ${infoDst.guidPrefix}`);
+            break;
+          case SubMessageId.HEARTBEAT:
+            this.handleHeartbeat(message.guidPrefix, msg as HeartbeatView);
+            break;
+          case SubMessageId.ACKNACK:
+            this.handleAckNack(message.guidPrefix, msg as AckNackView);
+            break;
+          case SubMessageId.DATA:
+            this.handleDataMsg(message.guidPrefix, msg as DataMsgView);
+            break;
+          case SubMessageId.GAP:
+            this.handleGap(message.guidPrefix, msg as GapView);
+            break;
+          case SubMessageId.DATA_FRAG:
+            this.handleDataFrag(message.guidPrefix, msg as DataFragView);
+            break;
+          case SubMessageId.HEARTBEAT_FRAG:
+            this.handleHeartbeatFrag(message.guidPrefix, msg as HeartbeatFragView);
+            break;
+          case SubMessageId.NACK_FRAG:
+            this.handleNackFrag(message.guidPrefix, msg as NackFragView);
+            break;
+          default:
+            this._log?.warn?.(`ignoring unhandled submessage ${msg.submessageId}`);
+            break;
+        }
+      } catch (err) {
+        this.handleError(err as Error);
       }
     }
   };
