@@ -1159,24 +1159,34 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
-    const fragmentTracker = participant.tryGetFragments(
-      heartbeatFrag.writerEntityId,
-      heartbeatFrag.writerSeqNumber,
-    );
+    const { count, lastFragmentNumber, readerEntityId, writerEntityId, writerSeqNumber } =
+      heartbeatFrag;
+
+    const fragmentTracker = participant.tryGetFragments(writerEntityId, writerSeqNumber);
     if (fragmentTracker == undefined) {
       this._log?.warn?.(
         `received HEARTBEAT_FRAG for unknown packet ${uint32ToHex(
-          heartbeatFrag.writerEntityId,
-        )} :: ${heartbeatFrag.writerSeqNumber}`,
+          writerEntityId,
+        )} :: ${writerSeqNumber}`,
       );
       return;
     }
 
-    if (!fragmentTracker.hasUpTo(heartbeatFrag.lastFragmentNumber - 1)) {
-      // One or more fragments are missing, send a NACK_FRAG
+    this._log?.debug?.(
+      `  [SUBMSG] HEARTBEAT_FRAG writer=${this.writerName(
+        writerEntityId,
+      )} lastFragmentNumber=${lastFragmentNumber} (count=${count}, seq=${writerSeqNumber})`,
+    );
+
+    // If one or more fragments are missing for the current sequence number,
+    // send a NACK_FRAG
+    if (!fragmentTracker.hasUpTo(lastFragmentNumber - 1)) {
       void this.sendNackFragTo(
         guidPrefix,
-        heartbeatFrag,
+        lastFragmentNumber,
+        readerEntityId,
+        writerEntityId,
+        writerSeqNumber,
         fragmentTracker,
         participant.attributes.metatrafficUnicastLocatorList,
       );
