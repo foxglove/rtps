@@ -95,17 +95,6 @@ export class ReaderHistoryCache {
       return new SequenceNumberSet(lastSeqNumber, 0);
     }
 
-    // Record the sequence numbers of all missing entries in _sequenceToEntry
-    const numBits = Math.min(1 + Number(lastSeqNumber - firstSeqNumber), 256);
-    const set = new SequenceNumberSet(firstSeqNumber, numBits);
-    let hasAll = true;
-    for (let seq = firstSeqNumber; seq <= lastSeqNumber; seq++) {
-      if (!this._sequenceToEntry.contains(seq)) {
-        set.add(seq);
-        hasAll = false;
-      }
-    }
-
     // Discard everything before firstSeqNumber
     let minSeq = this._sequenceToEntry.minNode()?.key;
     while (minSeq != undefined && minSeq < firstSeqNumber) {
@@ -123,8 +112,40 @@ export class ReaderHistoryCache {
       minSeq = this._sequenceToEntry.minNode()?.key;
     }
 
-    return hasAll ? new SequenceNumberSet(lastSeqNumber + 1n, 0) : set;
+    return buildSequenceNumberSet(firstSeqNumber, lastSeqNumber, this._sequenceToEntry);
   }
+}
+
+function buildSequenceNumberSet(
+  firstSeqNumber: SequenceNumber,
+  lastSeqNumber: SequenceNumber,
+  sequenceToEntry: AVLTree<SequenceNumber, CacheChange>,
+): SequenceNumberSet {
+  // Find the first missing sequence number
+  let firstMissingSeqNumber = -1n;
+  for (let seq = firstSeqNumber; seq <= lastSeqNumber; seq++) {
+    if (!sequenceToEntry.contains(seq)) {
+      firstMissingSeqNumber = seq;
+      break;
+    }
+  }
+
+  // If all sequence numbers are available, return an empty set starting after lastSeqNumber
+  if (firstMissingSeqNumber === -1n) {
+    return new SequenceNumberSet(lastSeqNumber + 1n, 0);
+  }
+
+  // Create a SequenceNumberSet from the first missing sequence number to lastSeqNumber
+  // (or firstMissingSeqNumber+256 if that's too far)
+  const numBits = Math.min(1 + Number(lastSeqNumber - firstMissingSeqNumber), 256);
+  const set = new SequenceNumberSet(firstMissingSeqNumber, numBits);
+  for (let seq = firstSeqNumber; seq <= lastSeqNumber; seq++) {
+    if (!sequenceToEntry.contains(seq)) {
+      set.add(seq);
+    }
+  }
+
+  return set;
 }
 
 function setTreeEntry(tree: AVLTree<SequenceNumber, CacheChange>, change: CacheChange) {

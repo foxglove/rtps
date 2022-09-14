@@ -39,9 +39,9 @@ describe("ReaderHistoryCache", () => {
     expect(history.get(3n)).toBeUndefined();
     expect(history.get(4n)).toBeUndefined();
     expect(missing.size).toEqual(16);
-    expect(missing.base).toEqual(1n);
-    expect(missing.numBits).toEqual(3);
-    expect(missing.bitmap).toEqual(new Uint32Array([1610612736, 0, 0, 0, 0, 0, 0, 0]));
+    expect(missing.base).toEqual(2n);
+    expect(missing.numBits).toEqual(2);
+    expect(missing.bitmap).toEqual(new Uint32Array([3221225472, 0, 0, 0, 0, 0, 0, 0]));
 
     const secondEntry = {
       timestamp: { sec: 2, nsec: 0 },
@@ -62,9 +62,9 @@ describe("ReaderHistoryCache", () => {
     expect(history.get(3n)).toBeUndefined();
     expect(history.get(4n)).toBeUndefined();
     expect(missing.size).toEqual(16);
-    expect(missing.base).toEqual(1n);
-    expect(missing.numBits).toEqual(3);
-    expect(missing.bitmap).toEqual(new Uint32Array([536870912, 0, 0, 0, 0, 0, 0, 0]));
+    expect(missing.base).toEqual(3n);
+    expect(missing.numBits).toEqual(1);
+    expect(missing.bitmap).toEqual(new Uint32Array([2147483648, 0, 0, 0, 0, 0, 0, 0]));
 
     const thirdEntry = {
       timestamp: { sec: 3, nsec: 0 },
@@ -174,9 +174,9 @@ describe("ReaderHistoryCache", () => {
     expect(history.get(3n)).toBeUndefined();
     expect(history.get(4n)).toBeUndefined();
     expect(missing.size).toEqual(16);
-    expect(missing.base).toEqual(1n);
-    expect(missing.numBits).toEqual(3);
-    expect(missing.bitmap).toEqual(new Uint32Array([536870912, 0, 0, 0, 0, 0, 0, 0]));
+    expect(missing.base).toEqual(3n);
+    expect(missing.numBits).toEqual(1);
+    expect(missing.bitmap).toEqual(new Uint32Array([2147483648, 0, 0, 0, 0, 0, 0, 0]));
 
     const fourthEntry = {
       timestamp: { sec: 4, nsec: 0 },
@@ -197,9 +197,9 @@ describe("ReaderHistoryCache", () => {
     expect(history.get(3n)).toBeUndefined();
     expect(history.get(4n)).toBe(fourthEntry);
     expect(missing.size).toEqual(16);
-    expect(missing.base).toEqual(1n);
-    expect(missing.numBits).toEqual(3);
-    expect(missing.bitmap).toEqual(new Uint32Array([536870912, 0, 0, 0, 0, 0, 0, 0]));
+    expect(missing.base).toEqual(3n);
+    expect(missing.numBits).toEqual(1);
+    expect(missing.bitmap).toEqual(new Uint32Array([2147483648, 0, 0, 0, 0, 0, 0, 0]));
     expect(firstEntry.kind).toEqual(ChangeKind.Alive);
 
     const thirdEntry = {
@@ -253,9 +253,9 @@ describe("ReaderHistoryCache", () => {
     expect(history.get(5n)).toBeUndefined();
     expect(history.get(6n)).toBeUndefined();
     expect(missing.size).toEqual(16);
-    expect(missing.base).toEqual(1n);
-    expect(missing.numBits).toEqual(3);
-    expect(missing.bitmap).toEqual(new Uint32Array([1610612736, 0, 0, 0, 0, 0, 0, 0]));
+    expect(missing.base).toEqual(2n);
+    expect(missing.numBits).toEqual(2);
+    expect(missing.bitmap).toEqual(new Uint32Array([3221225472, 0, 0, 0, 0, 0, 0, 0]));
 
     const secondEntry = {
       timestamp: { sec: 2, nsec: 0 },
@@ -306,9 +306,9 @@ describe("ReaderHistoryCache", () => {
     expect(history.get(5n)).toBeUndefined();
     expect(history.get(6n)).toBe(sixthGap);
     expect(missing.size).toEqual(16);
-    expect(missing.base).toEqual(1n);
-    expect(missing.numBits).toEqual(3);
-    expect(missing.bitmap).toEqual(new Uint32Array([1610612736, 0, 0, 0, 0, 0, 0, 0]));
+    expect(missing.base).toEqual(2n);
+    expect(missing.numBits).toEqual(2);
+    expect(missing.bitmap).toEqual(new Uint32Array([3221225472, 0, 0, 0, 0, 0, 0, 0]));
     expect(secondEntry.kind).toEqual(ChangeKind.Alive);
 
     const fifthEntry = {
