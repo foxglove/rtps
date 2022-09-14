@@ -688,6 +688,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         break;
       }
     }
+    if (endSeq > lastSeqNumber) {
+      endSeq = lastSeqNumber;
+    }
 
     if (endSeq < firstAvailableSeqNumber) {
       // No sequence numbers need AckNack (only sending NackFrag)
