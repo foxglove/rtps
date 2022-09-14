@@ -35,6 +35,7 @@ import {
 import { parseEndpoint, parseParticipant } from "./discovery";
 import { CacheChange, EMPTY_DATA } from "./history";
 import { Message, MessageView, Parameters, ParametersView } from "./messaging";
+import { SubMessageGroup } from "./messaging/SubMessageGroup";
 import {
   AckNack,
   AckNackFlags,
@@ -83,7 +84,6 @@ import {
   UdpSocketCreate,
   UdpSocketOptions,
 } from "./transport";
-import { SubMessageGroup } from "./messaging/SubMessageGroup";
 
 export type ParticipantTuning = {
   keepAliveMs?: number;
