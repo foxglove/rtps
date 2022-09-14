@@ -1,5 +1,5 @@
 import { CdrReader } from "@foxglove/cdr";
-import { areEqual, fromDate, fromMillis, Time, toNanoSec } from "@foxglove/rostime";
+import { areEqual, fromDate, fromMillis, Time } from "@foxglove/rostime";
 import { EventEmitter } from "eventemitter3";
 
 import { ParticipantAttributes } from "./ParticipantAttributes";
@@ -51,9 +51,7 @@ import {
   HeartbeatFragView,
   HeartbeatView,
   InfoDst,
-  InfoDstView,
   InfoTs,
-  InfoTsView,
   NackFrag,
   NackFragView,
 } from "./messaging/submessages";
@@ -767,7 +765,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     this._log?.debug?.(
       `sending NACK_FRAG to ${makeGuid(guidPrefix, writerEntityId)} for seq ${writerSeqNumber} ${
-        state.numBits <= 16 ? state.toString() : `[...] (${state.numBits} bits)`
+        state.numBits <= 16
+          ? state.toString()
+          : `[${[...state.fragmentNumbers()][0]}, ...] (${state.numBits} bits)`
       }`,
     );
     await this.sendGroupToUdp(group, srcSocket, locators);
@@ -873,14 +873,10 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         switch (msg.submessageId) {
           case SubMessageId.INFO_TS: {
             // INFO_TS is already handled by setting effectiveTimestamp on other submessages
-            const infoTs = msg as InfoTsView;
-            this._log?.debug?.(`  [SUBMSG] INFO_TS ${toNanoSec(infoTs.timestamp)}`);
             break;
           }
           case SubMessageId.INFO_DST: {
             // INFO_DST is already handled by setting guidPrefix on other submessages
-            const infoDst = msg as InfoDstView;
-            this._log?.debug?.(`  [SUBMSG] INFO_DST ${infoDst.guidPrefix}`);
             break;
           }
           case SubMessageId.HEARTBEAT:
@@ -945,7 +941,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const writerGuid = makeGuid(guidPrefix, heartbeat.writerEntityId);
     const readers = this.getReaders(heartbeat.readerEntityId, writerGuid);
     if (readers.length === 0) {
-      this._log?.warn?.(
+      this._log?.info?.(
         `received unrecognized heartbeat reader=${heartbeat.readerEntityId}, writer=${writerGuid}`,
       );
       return;
@@ -1150,7 +1146,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     let recvBytes = 0;
     for (let i = 0; i < fragments.length; i++) {
       const fragment = fragments[i]!;
-      const index = fragmentStartingNum + i - 1;
+      const index = fragmentStartingNum - 1 + i;
       fragmentTracker.addFragment(index, fragment);
       recvBytes += fragment.length;
     }
@@ -1164,7 +1160,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       }, ${recvBytes} bytes frags=${currentFragments}/${fragmentTracker.fragmentCount} [${(
         (currentFragments / fragmentTracker.fragmentCount) *
         100
-      ).toFixed(1)}%] (seq ${writerSeqNumber}) from ${makeGuid(guidPrefix, writerEntityId)}`,
+      ).toFixed(2)}%] (seq ${writerSeqNumber}) from ${makeGuid(guidPrefix, writerEntityId)}`,
     );
 
     // Check if the complete DATA message is available
