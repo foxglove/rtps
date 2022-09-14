@@ -1,5 +1,5 @@
 import { GuidPrefix, writeGuidPrefix, VendorId, ProtocolVersion } from "../common";
-import { SubMessage } from "./SubMessage";
+import { SubMessageGroup } from "./SubMessageGroup";
 
 export type MessageOptions = {
   guidPrefix: GuidPrefix;
@@ -10,8 +10,8 @@ export type MessageOptions = {
 };
 
 export class Message {
-  private littleEndian: boolean;
   private buffer: ArrayBuffer;
+  private array: Uint8Array;
   private view: DataView;
   private offset: number;
 
@@ -24,8 +24,8 @@ export class Message {
   }
 
   constructor(opts: MessageOptions) {
-    this.littleEndian = !(opts.bigEndian === true);
     this.buffer = new ArrayBuffer(opts.maxSize ?? 1500);
+    this.array = new Uint8Array(this.buffer, 0, this.buffer.byteLength);
     this.view = new DataView(this.buffer);
 
     const protocolVersion = opts.protocolVersion;
@@ -39,7 +39,14 @@ export class Message {
     this.offset = 20;
   }
 
-  writeSubmessage(msg: SubMessage): void {
-    this.offset += msg.write(this.view, this.offset, this.littleEndian);
+  writeGroup(group: SubMessageGroup): void {
+    const data = group.data;
+    if (this.offset + data.byteLength > this.buffer.byteLength) {
+      throw new Error(
+        `Message buffer overflow: ${this.offset} + ${data.byteLength} > ${this.buffer.byteLength}`,
+      );
+    }
+    this.array.set(data, this.offset);
+    this.offset += data.byteLength;
   }
 }

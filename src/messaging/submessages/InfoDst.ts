@@ -18,6 +18,10 @@ export class InfoDst implements SubMessage {
     writeGuidPrefix(this.guidPrefix, output, offset + 4);
     return 16;
   }
+
+  static size(): number {
+    return 16;
+  }
 }
 
 export class InfoDstView extends SubMessageView {

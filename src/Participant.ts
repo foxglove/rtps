@@ -35,6 +35,7 @@ import {
 import { parseEndpoint, parseParticipant } from "./discovery";
 import { CacheChange, EMPTY_DATA } from "./history";
 import { Message, MessageView, Parameters, ParametersView } from "./messaging";
+import { SubMessageGroup } from "./messaging/SubMessageGroup";
 import {
   AckNack,
   AckNackFlags,
@@ -105,6 +106,8 @@ const builtinEndpoints =
   BuiltinEndpointSet.SubscriptionDetector |
   BuiltinEndpointSet.ParticipantMessageDataWriter |
   BuiltinEndpointSet.ParticipantMessageDataReader;
+
+const MAX_PAYLOAD_SIZE = 1400;
 
 export class Participant extends EventEmitter<ParticipantEvents> {
   readonly name: string;
@@ -358,25 +361,40 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       }
     }
 
-    // FIXME: Break up UDP packets at the MTU
-    const msg = new Message(this.attributes);
-    msg.writeSubmessage(new InfoDst(reader.attributes.guidPrefix));
+    if (changes.length === 0) {
+      return;
+    }
+
+    const BASE_SIZE = InfoDst.size() + InfoTs.size();
+    const MAX_GAP_SIZE = Gap.size(SequenceNumberSet.maxSize());
 
     const readerEntityId = reader.attributes.entityId;
     const writerEntityId = writer.attributes.entityId;
 
     // Append DATA messages
+    let group = new SubMessageGroup();
     let curTime: Time = { sec: -1, nsec: 0 };
     for (const change of changes) {
+      // Check if we need to start a new group
+      const size = BASE_SIZE + Math.max(DataMsg.size(change.data), MAX_GAP_SIZE);
+      if (group.size + size > MAX_PAYLOAD_SIZE) {
+        this._log?.debug?.(
+          `splitting changes group, ${group.size} + ${size} > ${MAX_PAYLOAD_SIZE}`,
+        );
+        await this.sendGroupToUdp(group, srcSocket, locators);
+        group = new SubMessageGroup();
+        group.writeSubmessage(new InfoDst(reader.attributes.guidPrefix));
+      }
+
       // Write an INFO_TS (timestamp) submessage if necessary
       if (!areEqual(curTime, change.timestamp)) {
-        msg.writeSubmessage(new InfoTs(change.timestamp));
+        group.writeSubmessage(new InfoTs(change.timestamp));
         curTime = change.timestamp;
       }
 
       if (change.kind === ChangeKind.Alive || change.data.length > 0) {
         // Write this DATA submessage
-        msg.writeSubmessage(
+        group.writeSubmessage(
           new DataMsg(
             readerEntityId,
             writerEntityId,
@@ -389,7 +407,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         );
       } else {
         // Write a GAP submessage
-        msg.writeSubmessage(
+        group.writeSubmessage(
           new Gap(
             readerEntityId,
             writerEntityId,
@@ -403,7 +421,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     // Append a HEARTBEAT message
     const firstSeq = writer.history.getSequenceNumMin() ?? 1n;
     const lastSeq = writer.history.getSequenceNumMax() ?? 0n;
-    msg.writeSubmessage(
+    group.writeSubmessage(
       new Heartbeat(
         readerEntityId,
         writerEntityId,
@@ -415,13 +433,12 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     );
 
     this._log?.debug?.(
-      `sending ${changes.length} change(s) (${msg.size} bytes), reader=${this.readerName(
+      `sending ${changes.length} change(s), reader=${this.readerName(
         readerEntityId,
       )}, writer=${this.writerName(writerEntityId)}`,
     );
 
-    // Send this message as a UDP packet
-    await sendMessageToUdp(msg, srcSocket, locators);
+    await this.sendGroupToUdp(group, srcSocket, locators);
   }
 
   subscribe(opts: SubscribeOpts): EntityId {
@@ -580,9 +597,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
-    const msg = new Message(this.attributes);
-    msg.writeSubmessage(new InfoTs(change.timestamp));
-    msg.writeSubmessage(
+    const group = new SubMessageGroup();
+    group.writeSubmessage(new InfoTs(change.timestamp));
+    group.writeSubmessage(
       new DataMsg(
         EntityIdBuiltin.Unknown,
         EntityIdBuiltin.ParticipantWriter,
@@ -593,7 +610,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     );
 
     this._log?.debug?.(`broadcasting participant ${attributes.guidPrefix} to multicast`);
-    await sendMessageToUdp(msg, srcSocket, [this._multicastLocator]);
+    await this.sendGroupToUdp(group, srcSocket, [this._multicastLocator]);
   }
 
   async unadvertiseParticipant(guidPrefix: GuidPrefix): Promise<void> {
@@ -690,9 +707,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     }
 
     // RTPS message
-    const msg = new Message(this.attributes);
-    msg.writeSubmessage(new InfoDst(guidPrefix));
-    msg.writeSubmessage(
+    const group = new SubMessageGroup();
+    group.writeSubmessage(new InfoDst(guidPrefix));
+    group.writeSubmessage(
       new AckNack(
         readerEntityId,
         writerEntityId,
@@ -705,7 +722,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this._log?.debug?.(
       `sending ACKNACK to ${makeGuid(guidPrefix, writerEntityId)}, ${sequenceNumSet.toString()}`,
     );
-    await sendMessageToUdp(msg, srcSocket, locators);
+    await this.sendGroupToUdp(group, srcSocket, locators);
   }
 
   private async sendNackFragTo(
@@ -740,9 +757,9 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     }
 
     // RTPS message
-    const msg = new Message(this.attributes);
-    msg.writeSubmessage(new InfoDst(guidPrefix));
-    msg.writeSubmessage(
+    const group = new SubMessageGroup();
+    group.writeSubmessage(new InfoDst(guidPrefix));
+    group.writeSubmessage(
       new NackFrag(readerEntityId, writerEntityId, writerSeqNumber, state, ++fragmentTracker.count),
     );
 
@@ -751,6 +768,16 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         state.numBits <= 16 ? state.toString() : `[...] (${state.numBits} bits)`
       }`,
     );
+    await this.sendGroupToUdp(group, srcSocket, locators);
+  }
+
+  private async sendGroupToUdp(
+    group: SubMessageGroup,
+    srcSocket: UdpSocket,
+    locators: Locator[],
+  ): Promise<void> {
+    const msg = new Message(this.attributes);
+    msg.writeGroup(group);
     await sendMessageToUdp(msg, srcSocket, locators);
   }
 
@@ -1210,8 +1237,8 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       return;
     }
 
-    const msg = new Message(this.attributes);
-    msg.writeSubmessage(new InfoDst(participant.attributes.guidPrefix));
+    const group = new SubMessageGroup();
+    group.writeSubmessage(new InfoDst(participant.attributes.guidPrefix));
 
     for (const writer of this._writers.values()) {
       const readers = participant.remoteReadersForWriterId(writer.attributes.entityId);
@@ -1219,7 +1246,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       const lastSeq = writer.history.getSequenceNumMax() ?? 0n;
 
       for (const reader of readers) {
-        msg.writeSubmessage(
+        group.writeSubmessage(
           new Heartbeat(
             reader.attributes.entityId,
             writer.attributes.entityId,
@@ -1234,9 +1261,13 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     // Send this message as a UDP packet
     this._log?.debug?.(
-      `sending ${msg.size} byte initial heartbeat message to ${participant.attributes.guidPrefix}`,
+      `sending ${group.size} byte initial heartbeat message to ${participant.attributes.guidPrefix}`,
     );
-    await sendMessageToUdp(msg, srcSocket, participant.attributes.metatrafficUnicastLocatorList);
+    await this.sendGroupToUdp(
+      group,
+      srcSocket,
+      participant.attributes.metatrafficUnicastLocatorList,
+    );
   }
 
   private handleParticipant = (
