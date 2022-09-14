@@ -749,11 +749,10 @@ export class Participant extends EventEmitter<ParticipantEvents> {
 
     const base = missing[0]!;
     const lastMissing = missing[missing.length - 1]!;
-    const numBits = lastMissing - base;
+    const numBits = Math.min(1 + lastMissing - base, 256);
     const state = new FragmentNumberSet(base, numBits);
-    for (const idx of missing) {
-      const fragmentNum = idx + 1;
-      if (fragmentNum > lastFragmentNumber) {
+    for (const fragmentNum of missing) {
+      if (fragmentNum > lastFragmentNumber || fragmentNum - base >= numBits) {
         break;
       }
       state.add(fragmentNum);
