@@ -941,7 +941,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     const writerGuid = makeGuid(guidPrefix, heartbeat.writerEntityId);
     const readers = this.getReaders(heartbeat.readerEntityId, writerGuid);
     if (readers.length === 0) {
-      this._log?.info?.(
+      this._log?.warn?.(
         `received unrecognized heartbeat reader=${heartbeat.readerEntityId}, writer=${writerGuid}`,
       );
       return;
