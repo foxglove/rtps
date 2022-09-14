@@ -10,7 +10,7 @@ import {
 } from "../transport";
 
 const SEND_BUFFER_SIZE = 262144;
-const RECV_BUFFER_SIZE = 26214400;
+const RECV_BUFFER_SIZE = 4194304;
 
 export class UdpSocketNode extends EventEmitter<UdpSocketEvents> implements UdpSocket {
   private _socket: dgram.Socket;
