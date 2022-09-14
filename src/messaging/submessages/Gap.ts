@@ -32,6 +32,10 @@ export class Gap implements SubMessage {
     this.gapList.write(output, offset + 20, littleEndian);
     return 20 + gapListSize;
   }
+
+  static size(gapListSize: number): number {
+    return 20 + gapListSize;
+  }
 }
 
 export class GapView extends SubMessageView {

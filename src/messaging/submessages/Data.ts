@@ -46,6 +46,10 @@ export class DataMsg implements SubMessage {
     new Uint8Array(output.buffer, payloadOffset, payloadLength).set(this.serializedData);
     return 24 + payloadLength;
   }
+
+  static size(serializedData: Uint8Array): number {
+    return 24 + serializedData.byteLength;
+  }
 }
 
 export class DataMsgView extends SubMessageView {

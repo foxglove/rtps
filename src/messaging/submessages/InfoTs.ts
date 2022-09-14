@@ -22,6 +22,10 @@ export class InfoTs implements SubMessage {
     output.setUint32(offset + 8, nanosecondsToFraction(this.timestamp.nsec), littleEndian);
     return 12;
   }
+
+  static size(): number {
+    return 12;
+  }
 }
 
 export class InfoTsView extends SubMessageView {

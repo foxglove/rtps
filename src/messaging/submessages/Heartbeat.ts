@@ -38,6 +38,10 @@ export class Heartbeat implements SubMessage {
     output.setUint32(offset + 28, this.count, littleEndian);
     return 32;
   }
+
+  static size(): number {
+    return 32;
+  }
 }
 
 export class HeartbeatView extends SubMessageView {

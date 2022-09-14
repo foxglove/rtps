@@ -83,4 +83,8 @@ export class SequenceNumberSet {
     }
     return new SequenceNumberSet(bitmapBase, numBits, bitmap);
   }
+
+  static maxSize(): number {
+    return 8 + 4 + MAX_ITEMS * 4;
+  }
 }
