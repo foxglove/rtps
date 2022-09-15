@@ -1,6 +1,6 @@
 {
   "name": "@foxglove/rtps",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Real-Time Publish Subscribe (DDS-RTPS) protocol implementation with a pluggable transport layer. This is a subset of the complete specification optimized for ROS 2 (Robot Operating System) connections",
   "license": "MIT",
   "keywords": [
