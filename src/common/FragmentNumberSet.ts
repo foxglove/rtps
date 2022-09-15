@@ -68,7 +68,9 @@ export class FragmentNumberSet {
 
   toString(): string {
     const missing = Array.from(this.fragmentNumbers());
-    return `base=${this.base}, numBits=${this.numBits}, missing=[${missing.join(",")}]`;
+    return `FragmentNumberSet<base=${this.base}, numBits=${this.numBits}, missing=[${missing.join(
+      ",",
+    )}]>`;
   }
 
   static fromData(view: DataView, offset: number, littleEndian: boolean): FragmentNumberSet {

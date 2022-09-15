@@ -56,11 +56,12 @@ export class DataFragments {
     return true;
   }
 
+  /** Note: returns fragment numbers (index + 1), not indices */
   *missingFragments(lastFragmentNumber: number): Generator<number> {
     const limit = Math.min(this.fragmentCount, lastFragmentNumber);
     for (let i = 0; i < limit; i++) {
       if (this.fragments[i] == undefined) {
-        yield i;
+        yield i + 1;
       }
     }
   }
