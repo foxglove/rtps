@@ -95,6 +95,11 @@ export interface ParticipantEvents {
   userData: (userData: UserData) => void;
 }
 
+enum SourceSocketType {
+  Unicast = 0,
+  Multicast = 1,
+}
+
 const builtinEndpoints =
   BuiltinEndpointSet.ParticipantAnnouncer |
   BuiltinEndpointSet.ParticipantDetector |
@@ -221,7 +226,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     if (multiAddr != undefined) {
       this._log?.debug?.(`listening on UDP multicast ${multiAddr?.address}:${multiAddr?.port}`);
     } else {
-      this._log?.warn?.(`failed to bind UDP multicast socket to ${address}`);
+      throw new Error(`failed to bind UDP multicast socket to ${address}`);
     }
 
     // Create the unicast UDP socket for sending and receiving directly to participants
@@ -239,7 +244,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       this.attributes.defaultUnicastLocatorList = [locator];
       this.attributes.metatrafficUnicastLocatorList = [locator];
     } else {
-      this._log?.warn?.(`failed to bind UDP socket to ${address}`);
+      throw new Error(`failed to bind UDP socket to ${address}`);
     }
 
     // Record an advertisement for ourself in the ParticipantWriter history
@@ -281,8 +286,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   async sendAlive(manual?: boolean): Promise<void> {
-    const srcSocket = this._unicastSocket;
-    if (srcSocket == undefined) {
+    if (this._unicastSocket == undefined) {
       return;
     }
 
@@ -334,8 +338,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   async sendChangesTo(reader: ReaderView, writer: Writer, locators: Locator[]): Promise<void> {
-    const srcSocket = this._unicastSocket;
-    if (srcSocket == undefined) {
+    if (this._unicastSocket == undefined) {
       return;
     }
 
@@ -379,7 +382,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
         this._log?.debug?.(
           `splitting changes group, ${group.size} + ${size} > ${MAX_PAYLOAD_SIZE}`,
         );
-        await this.sendGroupToUdp(group, srcSocket, locators);
+        await this.sendGroupToUdp(group, SourceSocketType.Unicast, locators);
         group = new SubMessageGroup();
         group.writeSubmessage(new InfoDst(reader.attributes.guidPrefix));
       }
@@ -436,7 +439,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
       )}, writer=${this.writerName(writerEntityId)}`,
     );
 
-    await this.sendGroupToUdp(group, srcSocket, locators);
+    await this.sendGroupToUdp(group, SourceSocketType.Unicast, locators);
   }
 
   subscribe(opts: SubscribeOpts): EntityId {
@@ -576,8 +579,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
   }
 
   async broadcastParticipant(attributes: ParticipantAttributes): Promise<void> {
-    const srcSocket = this._multicastSocket;
-    if (srcSocket == undefined) {
+    if (this._multicastSocket == undefined) {
       return;
     }
 
@@ -608,7 +610,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     );
 
     this._log?.debug?.(`broadcasting participant ${attributes.guidPrefix} to multicast`);
-    await this.sendGroupToUdp(group, srcSocket, [this._multicastLocator]);
+    await this.sendGroupToUdp(group, SourceSocketType.Multicast, [this._multicastLocator]);
   }
 
   async unadvertiseParticipant(guidPrefix: GuidPrefix): Promise<void> {
@@ -653,8 +655,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     final: boolean,
     locators: Locator[],
   ): Promise<void> {
-    const srcSocket = this._unicastSocket;
-    if (srcSocket == undefined) {
+    if (this._unicastSocket == undefined) {
       return;
     }
 
@@ -723,7 +724,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     this._log?.debug?.(
       `sending ACKNACK to ${makeGuid(guidPrefix, writerEntityId)}, ${sequenceNumSet.toString()}`,
     );
-    await this.sendGroupToUdp(group, srcSocket, locators);
+    await this.sendGroupToUdp(group, SourceSocketType.Unicast, locators);
   }
 
   private async sendNackFragTo(
@@ -735,8 +736,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     fragmentTracker: DataFragments,
     locators: Locator[],
   ): Promise<void> {
-    const srcSocket = this._unicastSocket;
-    if (srcSocket == undefined) {
+    if (this._unicastSocket == undefined) {
       return;
     }
 
@@ -770,18 +770,84 @@ export class Participant extends EventEmitter<ParticipantEvents> {
           : `[${[...state.fragmentNumbers()][0]}, ...] (${state.numBits} bits)`
       }`,
     );
-    await this.sendGroupToUdp(group, srcSocket, locators);
+    await this.sendGroupToUdp(group, SourceSocketType.Unicast, locators);
   }
+
+  private pendingGroups = [
+    new Map<Locator, SubMessageGroup[]>(),
+    new Map<Locator, SubMessageGroup[]>(),
+  ];
+  private pendingGroupsTimer: ReturnType<typeof setTimeout> | undefined;
 
   private async sendGroupToUdp(
     group: SubMessageGroup,
-    srcSocket: UdpSocket,
-    locators: Locator[],
+    srcType: SourceSocketType,
+    destLocators: Locator[],
   ): Promise<void> {
-    const msg = new Message(this.attributes);
-    msg.writeGroup(group);
-    await sendMessageToUdp(msg, srcSocket, locators);
+    const groupMap = this.pendingGroups[srcType]!;
+    for (const locator of destLocators) {
+      let groups = groupMap.get(locator);
+      if (groups == undefined) {
+        groups = [];
+        groupMap.set(locator, groups);
+      }
+      groups.push(group);
+    }
+
+    if (this.pendingGroupsTimer == undefined) {
+      this.pendingGroupsTimer = setTimeout(this.writePendingGroupsToUdp, 10);
+    }
   }
+
+  private writePendingGroupsToUdp = (): void => {
+    this.pendingGroupsTimer = undefined;
+    if (this._unicastSocket == undefined || this._multicastSocket == undefined) {
+      this.pendingGroups[SourceSocketType.Unicast]!.clear();
+      this.pendingGroups[SourceSocketType.Multicast]!.clear();
+      return;
+    }
+
+    const multicastGroups = this.pendingGroups[SourceSocketType.Multicast]!;
+    let msg = new Message(this.attributes);
+    for (const [locator, groups] of multicastGroups.entries()) {
+      for (const group of groups) {
+        const groupSize = group.size;
+        if (msg.size + groupSize > MAX_PAYLOAD_SIZE) {
+          sendMessageToUdp(msg, this._multicastSocket, locator);
+          msg = new Message(this.attributes);
+        }
+
+        msg.writeGroup(group);
+      }
+      groups.length = 0;
+
+      if (msg.hasSubMessages()) {
+        sendMessageToUdp(msg, this._multicastSocket, locator);
+        msg = new Message(this.attributes);
+      }
+    }
+
+    const unicastGroups = this.pendingGroups[SourceSocketType.Unicast]!;
+    msg = new Message(this.attributes);
+    for (const [locator, groups] of unicastGroups.entries()) {
+      for (const group of groups) {
+        const groupSize = group.size;
+        if (msg.size + groupSize > MAX_PAYLOAD_SIZE) {
+          sendMessageToUdp(msg, this._unicastSocket, locator);
+          msg = new Message(this.attributes);
+        }
+
+        msg.writeGroup(group);
+      }
+      groups.length = 0;
+
+      if (msg.hasSubMessages()) {
+        sendMessageToUdp(msg, this._unicastSocket, locator);
+        msg = new Message(this.attributes);
+      }
+    }
+    unicastGroups.clear();
+  };
 
   private addBuiltinWriter(
     endpointsAvailable: BuiltinEndpointSet,
@@ -1263,7 +1329,7 @@ export class Participant extends EventEmitter<ParticipantEvents> {
     );
     await this.sendGroupToUdp(
       group,
-      srcSocket,
+      SourceSocketType.Unicast,
       participant.attributes.metatrafficUnicastLocatorList,
     );
   }

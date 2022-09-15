@@ -23,6 +23,10 @@ export class Message {
     return this.offset;
   }
 
+  hasSubMessages(): boolean {
+    return this.offset > 20;
+  }
+
   constructor(opts: MessageOptions) {
     this.buffer = new ArrayBuffer(opts.maxSize ?? 1500);
     this.array = new Uint8Array(this.buffer, 0, this.buffer.byteLength);

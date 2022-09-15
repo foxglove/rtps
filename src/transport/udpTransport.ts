@@ -56,14 +56,12 @@ export function locatorFromUdpAddress(address: UdpAddress): Locator {
 export async function sendMessageToUdp(
   msg: Message,
   srcSocket: UdpSocket,
-  locators: Locator[],
+  locator: Locator,
 ): Promise<void> {
   const data = msg.data;
-  for (const locator of locators) {
-    if (locator.kind === LocatorKind.UDPv4) {
-      await srcSocket.send(data, 0, data.length, locator.port, locator.address);
-      return;
-    }
+  if (locator.kind === LocatorKind.UDPv4) {
+    await srcSocket.send(data, 0, data.length, locator.port, locator.address);
+    return;
   }
 }
 
