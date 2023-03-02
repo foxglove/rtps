@@ -34,7 +34,7 @@ net.ipv4.udp_mem=26214400
 
 ## License
 
-@foxglove/rtps is licensed under [MIT License](https://opensource.org/licenses/MIT).
+@foxglove/rtps is licensed under the [MIT License](https://opensource.org/licenses/MIT).
 
 ## Releasing
 
