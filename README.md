@@ -4,6 +4,10 @@
 
 [![npm version](https://img.shields.io/npm/v/@foxglove/rtps.svg?style=flat)](https://www.npmjs.com/package/@foxglove/rtps)
 
+## Deprecated
+
+This library is no longer maintained by Foxglove, as we now use the [Foxglove WebSocket](https://foxglove.dev/docs/studio/connection/ros2) for connecting to ROS 2 systems.
+
 ## Usage
 
 ```Typescript
